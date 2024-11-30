@@ -1,0 +1,58 @@
+# Ignorer les fichiers compilés Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorer les fichiers de virtualenv
+env/
+venv/
+ENV/
+.venv/
+.python-version
+<<<<<<< HEAD
+app/.env
+=======
+>>>>>>> 2a40a26 (Ajout des fichiers nécessaires, respect du .gitignore)
+
+# ignore model
+model/
+db/
+images/
+pdf/
+run.sh
+createCodebase.py
+<<<<<<< HEAD
+generate.py.venv
+=======
+>>>>>>> 2a40a26 (Ajout des fichiers nécessaires, respect du .gitignore)
+codeBase.md
+
+
+# Ignorer les fichiers de logs
+*.log
+
+# Ignorer les fichiers de cache
+*.cache
+*.egg-info/
+*.eggs
+
+# Ignorer les fichiers de configuration d'IDE
+.vscode/
+.idea/
+
+# Ignorer les fichiers temporaires
+*.tmp
+*.bak
+*.swp
+*.swo
+.DS_Store
+
+# Ignorer les fichiers générés par Jupyter Notebook
+.ipynb_checkpoints/
+
+# Ignorer les archives et fichiers compressés
+*.tar
+*.gz
+*.zip
+*.rar
