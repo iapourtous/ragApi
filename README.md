@@ -125,7 +125,7 @@ Nous avons besoin de votre aide pour rendre ce projet encore meilleur !
 ---
 
 ## 📄 **Licence**
-- **Licence AGPL-3.0** pour usage non commercial
+- **Licence MPL2.0** avec clause pour usage non commercial
 - **Licence commerciale** pour usage professionnel
 
 ---

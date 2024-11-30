@@ -1,25 +1,34 @@
-# Licence
 
-Copyright (C) 2024 IA Pour Tous
+# Mozilla Public License Version 2.0 (MPL 2.0) with Commercial Use Restriction
 
-## Licence Double
+## Preamble
+This software is licensed under the Mozilla Public License 2.0 (MPL 2.0) with additional terms restricting commercial use. You may use, modify, and distribute the software for personal, academic, or research purposes under the MPL 2.0. Commercial use, however, requires a separate agreement and license.
 
-Ce projet est disponible sous une double licence :
+---
 
-### 1. Licence Non Commerciale - GNU Affero General Public License v3.0 (AGPL-3.0)
+## Full License Text: Mozilla Public License Version 2.0
 
-Ce programme est un logiciel libre : vous pouvez le redistribuer et/ou le modifier selon les termes de la GNU Affero General Public License telle que publiée par la Free Software Foundation, soit la version 3 de la Licence, soit (à votre choix) toute version ultérieure.
+The full text of the Mozilla Public License Version 2.0 can be found here:
+[https://www.mozilla.org/en-US/MPL/2.0/](https://www.mozilla.org/en-US/MPL/2.0/)
 
-Ce programme est distribué dans l'espoir qu'il sera utile, mais SANS AUCUNE GARANTIE ; sans même la garantie implicite de COMMERCIALISATION ou d'ADAPTATION À UN USAGE PARTICULIER. Voir la GNU Affero General Public License pour plus de détails.
+---
 
-Vous devriez avoir reçu une copie de la GNU Affero General Public License avec ce programme. Si ce n'est pas le cas, consultez <https://www.gnu.org/licenses/>.
+## Addendum: Restriction on Commercial Use
 
-### 2. Licence Commerciale
+### 1. Definitions
+- **Commercial Use**: Any use of the software, directly or indirectly, to generate revenue or in connection with a commercial product or service, including but not limited to selling, licensing, or using the software in paid projects or services.
+- **Non-Commercial Use**: Use of the software for personal, educational, or research purposes without monetary gain.
 
-Pour une utilisation commerciale de ce logiciel, une licence séparée est requise. Cette licence commerciale inclut :
-- Le droit d'utiliser le logiciel dans des produits commerciaux
-- Un support technique dédié
-- Des fonctionnalités additionnelles
-- La possibilité d'intégration dans des solutions propriétaires
+### 2. Commercial Licensing
+If you wish to use this software for commercial purposes, you must obtain a separate commercial license by contacting the copyright holder at [your email or contact information].
 
-Pour obtenir une licence commerciale, veuillez nous contacter via [iapourtous.org](https://iapourtous.org).
+### 3. Non-Compliance
+Any commercial use of the software without a valid commercial license constitutes a violation of this agreement and may result in legal action.
+
+### 4. Disclaimer
+This addendum does not alter the terms of the Mozilla Public License 2.0 for non-commercial uses. For commercial uses, this addendum overrides any conflicting terms in the MPL 2.0.
+
+---
+
+## Contact
+For inquiries regarding commercial licensing, please contact:[iapourtous.org](https://iapourtous.org).
