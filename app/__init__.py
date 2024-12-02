@@ -1,10 +1,11 @@
-from .services.sevice_manager import ServiceManager
 from flask import Flask
+from flask_cors import CORS
+from .services.sevice_manager import ServiceManager
 import logging
 from .model_loader import get_model, get_device
 from .services.user_service import UserService
 
-def create_app():
+def create_app(config=None):
     """
     Crée et configure l'application Flask.
     
@@ -13,6 +14,14 @@ def create_app():
     """
     # Création de l'instance Flask
     app = Flask(__name__)
+
+
+    CORS(app, resources={r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }})
 
     # Configuration du logging
     logging.basicConfig(level=logging.INFO)
@@ -27,11 +36,10 @@ def create_app():
     # Initialisation du gestionnaire de services avec la configuration
     app.services = ServiceManager(app.config)
 
-
-    # Configuration des routes
-    from .routes import setup_routes
-    setup_routes(app)
-    logger.info("Routes configurées")
+    # Configuration des blueprints
+    from .routes import init_routes
+    init_routes(app)
+    logger.info("Routes configurées via blueprints")
 
     # Chargement du modèle et configuration du device
     try:

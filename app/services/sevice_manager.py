@@ -1,6 +1,8 @@
+from app.services.blog_service import BlogService
 from app.services.queryData_service import QueryDataService
 from app.services.book_service import BookService
 from app.services.user_service import UserService
+
 
 class ServiceManager:
     """
@@ -49,6 +51,7 @@ class ServiceManager:
         self.book_service = BookService()
         self.user_service = UserService()
         self.query_service = QueryDataService()
+        self.blog_service = BlogService()
 
     def cleanup(self):
         """
