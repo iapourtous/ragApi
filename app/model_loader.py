@@ -1,5 +1,5 @@
 import torch
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer,export_static_quantized_openvino_model
 import logging
 import os
 from dotenv import load_dotenv
@@ -22,7 +22,7 @@ def initialize_model():
     global model
     try:
         logging.info(f"Chargement du modèle depuis {MODEL_PATH} sur {DEVICE}")
-        model = SentenceTransformer(MODEL_PATH, device=DEVICE)
+        model = SentenceTransformer("intfloat/multilingual-e5-large", backend="openvino", device=DEVICE)
         logging.info("Modèle chargé avec succès")
     except Exception as e:
         logging.error(f"Erreur lors du chargement du modèle : {e}")
