@@ -9,12 +9,12 @@ import torch
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
 
-from models.files_book import FilesBook
-from models.vllm_openai_model import VLLMOpenAIModel
-from utils.ai_utils import correct_ocr_text
-from utils.file_utils import save_processed_data
-from utils.text_utils import del_pages_number
-from background_tasks import extract_images_from_page
+from app.models.files_book import FilesBook
+from app.models.vllm_openai_model import VLLMOpenAIModel
+from app.utils.ai_utils import correct_ocr_text
+from app.utils.file_utils import save_processed_data
+from app.utils.text_utils import del_pages_number
+from app.background_tasks import extract_images_from_page
 
 # Configuration du logging
 logging.basicConfig(
