@@ -58,7 +58,7 @@ def convert_pdf_page_to_image(pdf_path, page_number=0, max_width=400, output_for
         if 'doc' in locals():
             doc.close()
             
-def resize_image(self, image_path, max_size=800):
+def resize_image(image_path, max_size=800):
     """Redimensionne l'image tout en conservant le ratio d'aspect."""
     try:
         with Image.open(image_path) as img:
@@ -72,9 +72,9 @@ def resize_image(self, image_path, max_size=800):
         logging.error(f"Erreur lors du redimensionnement de l'image {image_path}: {e}")
         return None
 
-def encode_image(self, image_path):
+def encode_image(image_path):
     """Encode l'image en base64."""
-    resized_image_path = self.resize_image(image_path)
+    resized_image_path = resize_image(image_path)
     if not resized_image_path:
         logging.error("Échec du redimensionnement de l'image. Encodage annulé.")
         return None

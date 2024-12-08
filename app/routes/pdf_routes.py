@@ -8,7 +8,9 @@ Ce module gère toutes les routes liées au traitement des PDF, incluant :
 - La gestion des images de pages
 """
 
-from flask import Blueprint, jsonify, request, current_app, send_from_directory, abort
+import json
+import sys
+from flask import Blueprint, Response, jsonify, request, current_app, send_from_directory, abort, stream_with_context
 import logging
 import os
 from threading import Thread
@@ -25,6 +27,51 @@ from app.services import BookService
 # Création du Blueprint
 pdf_bp = Blueprint('pdf', __name__)
 book_service = BookService()
+
+@pdf_bp.route('/process-sse', methods=['GET'])
+def process_sse():
+    query = request.args.get("query")
+    max_page = request.args.get("max_page", "30")
+    new_generate = request.args.get("new", "")
+    additional_instructions = request.args.get("additional_instructions", "")
+    files = request.args.getlist("files")
+    def event_stream():
+        # Le callback qui sera passé à process_query pour émettre les events SSE
+        def progress_callback(message):
+            # Chaque message doit être formaté en SSE :
+            # "data: ...\n\n" 
+            yield f"data: {message}\n\n"
+
+        # Comme process_query est synchrone, on peut "capturer" les yields du progress_callback
+        # en utilisant une astuce : créer un générateur intermédiaire
+        # On va créer une file de messages, et l'appeler ensuite.
+        
+        # Pour simplifier, on va utiliser un générateur interne pour capturer les messages.
+        messages = []
+
+        def local_callback(msg):
+            messages.append(msg)
+
+        # Lancer le traitement
+        result = process_query(
+            current_app,
+            query,
+            files,
+            new_generate,
+            additional_instructions=additional_instructions,
+            max_page=max_page,
+            progress_callback=local_callback
+        )
+
+        # Envoyer tous les messages de progression
+        for msg in messages:
+            yield f"data: {msg}\n\n"
+
+        # À la fin, envoyer la réponse finale sous forme de JSON
+        yield f"data: {json.dumps(result)}\n\n"
+
+    # La réponse SSE
+    return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
 
 @pdf_bp.route('/images/<filename>')
 def serve_image(filename):

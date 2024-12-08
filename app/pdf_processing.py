@@ -17,25 +17,16 @@ from .services.queryData_service import QueryDataService
 # Initialisation des services
 query_service = QueryDataService()
 
-def process_query(app, query, files, new_generate, additional_instructions="", max_page="30"):
-    """
-    Traite une requête utilisateur en recherchant dans les documents PDF et génère une réponse.
+def process_query(app, query, files, new_generate, additional_instructions="", max_page="30", progress_callback=None):
+    def send_progress(message):
+        if progress_callback:
+            progress_callback(message)
 
-    Args:
-        app: Instance de l'application Flask
-        query: Requête de l'utilisateur
-        files: Liste des fichiers à analyser
-        new_generate: Indicateur pour forcer une nouvelle génération
-        additional_instructions: Instructions supplémentaires pour le modèle
-        max_page: Nombre maximum de pages à traiter
-
-    Returns:
-        dict: Réponse structurée contenant les résultats de la recherche
-    """
     try:
         partial_responses = []
         batches_to_process = []
         
+        send_progress("Démarrage du traitement...")
         logging.info("=" * 50)
         logging.info("STARTING QUERY PROCESSING")
         logging.info(f"Query: {query}")
@@ -52,15 +43,16 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
         model_type_for_response = app.config['AI_MODEL_TYPE_FOR_REPONSE']
         model_type_for_filter= app.config['AI_MODEL_TYPE']
 
-        # Extraction des mots-clés et vectorisation de la requête
+        send_progress("Extraction des mots-clés...")
         most_words = search_upper_words(query)
         logging.info(f"Extracted keywords: {most_words}")
 
+        send_progress("Vectorisation de la requête...")
         vector_to_compare = vectorize_query(query, model)
         logging.info("Query vectorization completed")
 
-        # Vérification du cache sauf si nouvelle génération forcée
         if new_generate != "new":
+            send_progress("Vérification du cache...")
             logging.info("Searching in cache...")
             cached_response = query_service.search_similar_query(
                 query, 
@@ -69,11 +61,11 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 device
             )
             if cached_response:
+                send_progress("Réponse trouvée dans le cache, envoi de la réponse.")
                 logging.info("Response found in cache")
                 return cached_response['response']
             logging.info("No cached response found")
 
-        # Initialisation des collections
         leaf_matches = []
         tree_matches = []
         documents = {}
@@ -81,6 +73,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
 
         # Traitement de chaque fichier
         for file in files:
+            send_progress(f"Chargement du fichier {file}...")
             logging.info(f"\nProcessing file: {file}")
             loaded_book = load_processed_data(app, file)
             if loaded_book is None:
@@ -88,6 +81,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 continue
 
             logging.info(f"Data loaded successfully for: {file}")
+            send_progress(f"Analyse des pages du fichier {file}...")
 
             # Traitement du niveau feuille (pages)
             leaf_level = loaded_book.descriptions[0]
@@ -150,6 +144,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
 
             file_books[file] = loaded_book
 
+        send_progress("Filtrage initial des résultats...")
         # Combinaison et tri des correspondances
         all_matches = []
         for match in leaf_matches + tree_matches:
@@ -164,17 +159,13 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
             match['page_num'] = page_num
             all_matches.append(match)
 
-        # Tri par score et numéro de page
         all_matches.sort(key=lambda x: (-x['score'], x['page_num']))
 
-        # Filtrage initial par score
         MAX_MATCHES = int(max_page)
         initial_matches = all_matches[:MAX_MATCHES]
 
-        # Filtrage par LLM
-        logging.info(f"Début du filtrage LLM sur {len(initial_matches)} passages")
+        send_progress("Filtrage par LLM des passages retenus...")
         filtered_matches = []
-
         for match in initial_matches:
             is_relevant = filter_match_by_llm(
                 match, 
@@ -182,7 +173,6 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 api_key, 
                 model_type_for_filter
             )
-            
             if is_relevant:
                 filtered_matches.append(match)
                 logging.info(f"Page {match['page_num']} conservée (score: {match['score']:.3f})")
@@ -190,11 +180,10 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 logging.info(f"Page {match['page_num']} retirée (score: {match['score']:.3f})")
 
         all_matches = filtered_matches
-
         all_matches.sort(key=lambda x: x['page_num'])
 
         if not all_matches:
-            logging.warning("No matches found after filtering")
+            send_progress("Aucune correspondance pertinente trouvée.")
             return {
                 "LLMresponse": "Aucune correspondance pertinente n'a été trouvée dans les documents fournis.",
                 "documents": [],
@@ -204,14 +193,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 }
             }
 
-        logging.info(f"\nStatistics of retained matches:")
-        logging.info(f"- Total matches: {len(all_matches)}")
-        logging.info(f"- Highest score: {all_matches[0]['score']:.3f}")
-        logging.info(f"- Lowest score: {all_matches[-1]['score']:.3f}")
-        logging.info(f"- First page: {all_matches[0]['page_num']}")
-        logging.info(f"- Last page: {all_matches[-1]['page_num']}")
-
-        # Préparation des lots pour le traitement parallèle
+        send_progress("Préparation des lots pour la génération de la réponse...")
         main_stack = all_matches.copy()
         virtual_stack = []
 
@@ -251,7 +233,6 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 batches_to_process.append(batch_data)
                 virtual_stack = []
 
-        # Traitement du dernier lot
         if virtual_stack:
             temp_docs = {}
             for match in virtual_stack:
@@ -272,9 +253,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
             }
             batches_to_process.append(batch_data)
 
-        logging.info("\nPreparing to process batches in parallel")
-
-        # Traitement parallèle des lots
+        send_progress("Génération de la réponse par lot...")
         with ThreadPoolExecutor() as executor:
             future_to_batch = {
                 executor.submit(
@@ -294,22 +273,19 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 except Exception as exc:
                     logging.error(f"Batch generated an exception: {exc}")
 
-        # Fusion des réponses partielles
-        logging.info(f"Merging {len(partial_responses)} partial responses")
+        send_progress("Fusion des réponses partielles...")
         final_response = merge_responses(partial_responses, query, max_tokens=14000)
 
-        # Construction de la réponse finale
         response_data = {
             "LLMresponse": final_response,
             "documents": list(documents.values()),
             "matches": {
-                "leaf_matches": leaf_matches,
-                "tree_matches": tree_matches
+                "leaf_matches": leaf_matches[:10],
+                "tree_matches": tree_matches[:10]
             }
         }
 
-        # Sauvegarde de la réponse dans la base de données
-        logging.info("\nSaving response to the database")
+        send_progress("Sauvegarde de la réponse dans la base de données...")
         query_id = query_service.save_query(query, vector_to_compare, response_data)
         response_data["_id"] = query_id
 
@@ -321,11 +297,14 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
         logging.info(f"Number of partial responses: {len(partial_responses)}")
         logging.info("=" * 50)
 
+        send_progress("Traitement terminé.")
         return response_data
 
     except Exception as e:
         logging.error(f"Error in process_query: {e}")
         logging.exception("Details of the error:")
+        if progress_callback:
+            progress_callback(f"Erreur : {str(e)}")
         return {
             "LLMresponse": f"An error occurred during query processing: {str(e)}",
             "documents": [],
@@ -334,7 +313,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                 "tree_matches": []
             }
         }
-
+        
 def process_batch(batch_data, api_key, model_type):
     """
     Traite un lot de données et génère une réponse via le modèle de langage.
