@@ -24,7 +24,11 @@ def load_processed_data(app, file_name):
     logging.info(f"Aucune donnée en cache pour : {file_name}. Chargement depuis le fichier.")
     try:
         # Construction du chemin complet vers le fichier .db
-        file_path = os.path.join(app.config['FOLDER_PATH'], f"{file_name}.db")
+        try:
+            folder = app.config['FOLDER_PATH']  # Flask app
+        except AttributeError:
+            folder = app['config']['FOLDER_PATH']  # Copie de configuration
+        file_path = os.path.join(folder, f"{file_name}.db")
         with open(file_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
         

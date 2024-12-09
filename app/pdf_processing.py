@@ -16,6 +16,7 @@ from .services.queryData_service import QueryDataService
 
 # Initialisation des services
 query_service = QueryDataService()
+num_workers = 5
 
 def process_query(app, query, files, new_generate, additional_instructions="", max_page="30", progress_callback=None):
     def send_progress(message):
@@ -36,12 +37,12 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
         logging.info("=" * 50)
 
         start_time = time.time()
-        device = app.config['device']
-        model = app.model
+        device = app['config']['device']
+        model = app['model']
 
-        api_key = app.config['API_KEY']
-        model_type_for_response = app.config['AI_MODEL_TYPE_FOR_REPONSE']
-        model_type_for_filter= app.config['AI_MODEL_TYPE']
+        api_key = app['config']['API_KEY']
+        model_type_for_response = app['config']['AI_MODEL_TYPE_FOR_REPONSE']
+        model_type_for_filter= app['config']['AI_MODEL_TYPE']
 
         send_progress("Extraction des mots-clés...")
         most_words = search_upper_words(query)
@@ -166,18 +167,22 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
 
         send_progress("Filtrage par LLM des passages retenus...")
         filtered_matches = []
-        for match in initial_matches:
-            is_relevant = filter_match_by_llm(
-                match, 
-                query, 
-                api_key, 
-                model_type_for_filter
-            )
-            if is_relevant:
-                filtered_matches.append(match)
-                logging.info(f"Page {match['page_num']} conservée (score: {match['score']:.3f})")
-            else:
-                logging.info(f"Page {match['page_num']} retirée (score: {match['score']:.3f})")
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_match = {
+                executor.submit(filter_match_by_llm, match, query, api_key, model_type_for_filter): match
+                for match in initial_matches
+            }
+            for future in as_completed(future_to_match):
+                match = future_to_match[future]
+                try:
+                    is_relevant = future.result()
+                    if is_relevant:
+                        filtered_matches.append(match)
+                        logging.info(f"Page {match['page_num']} conservée (score: {match['score']:.3f})")
+                    else:
+                        logging.info(f"Page {match['page_num']} retirée (score: {match['score']:.3f})")
+                except Exception as exc:
+                    logging.error(f"An error occurred during LLM filtering of a match: {exc}")
 
         all_matches = filtered_matches
         all_matches.sort(key=lambda x: x['page_num'])
@@ -274,14 +279,13 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
                     logging.error(f"Batch generated an exception: {exc}")
 
         send_progress("Fusion des réponses partielles...")
-        final_response = merge_responses(partial_responses, query, max_tokens=14000)
+        final_response = merge_responses(app,partial_responses, query, max_tokens=14000)
 
         response_data = {
             "LLMresponse": final_response,
             "documents": list(documents.values()),
             "matches": {
-                "leaf_matches": leaf_matches[:10],
-                "tree_matches": tree_matches[:10]
+                "all_matches": all_matches,
             }
         }
 

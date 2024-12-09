@@ -48,3 +48,14 @@ def setup_config(app):
     missing_configs = [config for config in required_configs if not app.config.get(config)]
     if missing_configs:
         raise ValueError(f"Configurations manquantes : {', '.join(missing_configs)}")
+    
+def extract_config(app):
+    """
+    Crée une copie des configurations nécessaires pour les threads ou processus.
+    """
+    return {
+        "config": {key: value for key, value in app.config.items()},
+        "model": getattr(app, "model", None),
+        "services": getattr(app, "services", None),
+        "device": app.config.get("device")
+    }

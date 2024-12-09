@@ -79,7 +79,6 @@ def generate_ai_response(query, documentation, additional_instructions="", api_k
         raise ValueError("api_key and model_type must be provided")
 
     prompt = f"""
-Vous êtes un assistant expert en analyse documentaire, spécialisé dans l'extraction et la synthèse d'informations à partir de documents.
 
 QUESTION :
 {query}
@@ -112,7 +111,7 @@ RÉPONSE :
         response = ai_model.generate_response(
             model_type,
             api_key,
-            prompt
+            prompt,system="Vous êtes un assistant expert en analyse documentaire, spécialisé dans l'extraction et la synthèse d'informations à partir de documents."
         )
 
         if not response or not response.strip():
@@ -392,7 +391,7 @@ RÉSUMÉ :"""
     logging.info(description)
     return description, embedding
 
-def merge_responses(responses, query, max_tokens=8000):
+def merge_responses(app,responses, query, max_tokens=8000):
     """
     Fusionne les réponses partielles en plusieurs étapes si nécessaire.
     
@@ -406,7 +405,7 @@ def merge_responses(responses, query, max_tokens=8000):
     if len(responses) <= 1:
         return responses[0]
 
-    api_key = current_app.config['API_KEY']
+    api_key = app['config']['API_KEY']
     intermediate_responses = []
     current_batch = []
     current_tokens = 0
@@ -433,7 +432,7 @@ RÉPONSE FUSIONNÉE :"""
 
         try:
             return ai_model.generate_response(
-                current_app.config['AI_MODEL_TYPE_FOR_REPONSE'],
+                app['config']['AI_MODEL_TYPE_FOR_REPONSE'],
                 api_key,
                 batch_prompt
             )

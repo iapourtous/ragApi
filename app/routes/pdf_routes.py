@@ -9,12 +9,11 @@ Ce module gère toutes les routes liées au traitement des PDF, incluant :
 """
 
 import json
-import sys
 from flask import Blueprint, Response, jsonify, request, current_app, send_from_directory, abort, stream_with_context
 import logging
 import os
 from threading import Thread
-
+from queue import Queue
 from app.utils.auth_utils import token_required
 from app.utils.images_utils import convert_pdf_page_to_image
 from app.utils.vector_utils import compare_query_to_descriptions, serialize_tensor
@@ -23,10 +22,30 @@ from app.utils.ai_utils import reduceTextForDescriptions
 from app.pdf_processing import process_query
 from app.background_tasks import process_pdf
 from app.services import BookService
+from app.config import extract_config
 
 # Création du Blueprint
 pdf_bp = Blueprint('pdf', __name__)
 book_service = BookService()
+
+def run_process_query(app,query, files, new_generate, additional_instructions, max_page, queue):
+    def progress_callback(msg):
+        # Ajouter le message de progression dans la queue
+        queue.put(("progress", msg))
+
+    # Appel de votre process_query
+    result = process_query(
+        app,
+        query,
+        files,
+        new_generate,
+        additional_instructions=additional_instructions,
+        max_page=max_page,
+        progress_callback=progress_callback
+    )
+
+    # Une fois terminé, mettre la réponse finale dans la queue
+    queue.put(("final", result))
 
 @pdf_bp.route('/process-sse', methods=['GET'])
 def process_sse():
@@ -35,42 +54,30 @@ def process_sse():
     new_generate = request.args.get("new", "")
     additional_instructions = request.args.get("additional_instructions", "")
     files = request.args.getlist("files")
+
+    q = Queue()
+
+    # Lancer process_query dans un thread séparé
+    t = Thread(target=run_process_query, args=(extract_config(current_app),query, files, new_generate, additional_instructions, max_page, q))
+    t.start()
+
     def event_stream():
-        # Le callback qui sera passé à process_query pour émettre les events SSE
-        def progress_callback(message):
-            # Chaque message doit être formaté en SSE :
-            # "data: ...\n\n" 
-            yield f"data: {message}\n\n"
+        # Tant que le thread n'a pas terminé, on lit la queue
+        while True:
+            item = q.get()  # On attend qu'un message arrive
+            if item is None:
+                # Si on reçoit None, on arrête le streaming
+                break
 
-        # Comme process_query est synchrone, on peut "capturer" les yields du progress_callback
-        # en utilisant une astuce : créer un générateur intermédiaire
-        # On va créer une file de messages, et l'appeler ensuite.
-        
-        # Pour simplifier, on va utiliser un générateur interne pour capturer les messages.
-        messages = []
+            msg_type, content = item
+            if msg_type == "progress":
+                # Envoyer le message de progression immédiatement
+                yield f"data: {content}\n\n"
+            elif msg_type == "final":
+                # Envoyer la réponse finale (en JSON)
+                yield f"data: {json.dumps(content)}\n\n"
+                break
 
-        def local_callback(msg):
-            messages.append(msg)
-
-        # Lancer le traitement
-        result = process_query(
-            current_app,
-            query,
-            files,
-            new_generate,
-            additional_instructions=additional_instructions,
-            max_page=max_page,
-            progress_callback=local_callback
-        )
-
-        # Envoyer tous les messages de progression
-        for msg in messages:
-            yield f"data: {msg}\n\n"
-
-        # À la fin, envoyer la réponse finale sous forme de JSON
-        yield f"data: {json.dumps(result)}\n\n"
-
-    # La réponse SSE
     return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
 
 @pdf_bp.route('/images/<filename>')
