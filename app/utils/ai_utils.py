@@ -3,42 +3,133 @@ import logging
 from .file_utils import save_partial_data
 from .text_utils import split_text_into_chunks
 from .vector_utils import serialize_tensor
-from flask import current_app
+from flask import current_app, json
 from app.models.ai_model import AIModel
 
 ai_model = AIModel()
 
-def filter_match_by_llm(match, query, api_key, model_type):
+def filter_matches_by_llm_batch(passages_batch, query, api_key, model_type):
     """
-    Utilise le LLM pour déterminer si un passage est pertinent pour la requête.
-    
-    Args:
-        match: Dictionnaire contenant les informations du passage
-        query: Requête utilisateur
-        api_key: Clé API pour le modèle LLM
-        model_type: Type de modèle LLM à utiliser
-    
-    Returns:
-        bool: True si le passage est pertinent, False sinon
+    Évalue un lot de passages simultanément via LLM.
     """
-    prompt = f"""En tant qu'expert en analyse de pertinence, évaluez si le passage suivant répond ou apporte du contexte pertinent à la question posée.
-Répondez uniquement par 'OUI' ou 'NON'.
+    passages_text = "\n\n".join([
+        f"PASSAGE {i+1} (Page {match['page_num']}):\n{match['text']}"
+        for i, match in enumerate(passages_batch)
+    ])
+    
+    prompt = f"""En tant qu'expert en analyse de pertinence, évaluez si les passages suivants répondent ou apportent 
+du contexte pertinent à la question posée. Pour chaque passage, répondez uniquement par OUI ou NON.
 
 QUESTION:
 {query}
 
-PASSAGE (Page {match['page_num']}):
-{match['text']}
+{passages_text}
 
-Le passage répond-il à la question ou apporte-t-il un contexte pertinent ?
-Réponse (OUI/NON):"""
+FORMAT DE RÉPONSE REQUIS:
+Répondez exactement dans ce format, un résultat par ligne:
+PASSAGE 1: OUI/NON
+PASSAGE 2: OUI/NON
+etc.
+
+RÉPONSES:"""
 
     try:
         response = ai_model.generate_response(model_type, api_key, prompt)
-        return response.strip().upper().startswith('OUI')
+        
+        # Analyse des réponses
+        results = []
+        response_lines = response.strip().split('\n')
+        for line in response_lines:
+            if ':' in line:
+                result = line.split(':')[1].strip().upper().startswith('OUI')
+                results.append(result)
+                
+        # Si le nombre de réponses ne correspond pas au nombre de passages
+        if len(results) != len(passages_batch):
+            logging.warning(f"Nombre de réponses incorrect. Attendu: {len(passages_batch)}, Reçu: {len(results)}")
+            return [True] * len(passages_batch)
+            
+        return results
+        
     except Exception as e:
-        logging.error(f"Erreur lors de l'évaluation LLM de la pertinence: {e}")
-        return True
+        logging.error(f"Erreur lors de l'évaluation batch LLM: {e}")
+        return [True] * len(passages_batch)
+
+def llm_filter_matches(initial_matches, query, api_key, model_type, send_progress=None):
+    """
+    Filtre les passages en évaluant plusieurs passages simultanément.
+    """
+    if send_progress:
+        send_progress("Filtrage par LLM des passages retenus...")
+    filtered_matches = []
+    
+    # Nombre de passages à évaluer par lot
+    BATCH_SIZE = 5
+    
+    # Traitement par lots
+    for i in range(0, len(initial_matches), BATCH_SIZE):
+        batch = initial_matches[i:i + BATCH_SIZE]
+        
+        try:
+            results = filter_matches_by_llm_batch(batch, query, api_key, model_type)
+            
+            # Ajouter les passages pertinents aux résultats filtrés
+            for match, is_relevant in zip(batch, results):
+                if is_relevant:
+                    filtered_matches.append(match)
+                    logging.info(f"Page {match['page_num']} conservée (score: {match['score']:.3f})")
+                else:
+                    logging.info(f"Page {match['page_num']} retirée (score: {match['score']:.3f})")
+                    
+            # Mise à jour du progrès
+            if send_progress:
+                progress = (i + len(batch)) / len(initial_matches) * 100
+                send_progress(f"Filtrage LLM: {progress:.1f}% complété...")
+            
+        except Exception as e:
+            logging.error(f"Erreur lors du traitement du lot {i//BATCH_SIZE + 1}: {e}")
+            # En cas d'erreur, ajouter tous les passages du lot
+            filtered_matches.extend(batch)
+
+    # Tri final par numéro de page
+    filtered_matches.sort(key=lambda x: x['page_num'])
+    
+    logging.info(f"Filtrage LLM terminé: {len(filtered_matches)}/{len(initial_matches)} passages retenus")
+    return filtered_matches
+
+def clarify_question(query, api_key, model_type):
+    """
+    Reformule la requête en une question claire et précise.
+    
+    Args:
+        query: Requête utilisateur originale
+        api_key: Clé API pour le modèle LLM
+        model_type: Type de modèle LLM à utiliser
+    
+    Returns:
+        str: Question clarifiée
+    """
+    prompt = f"""En tant qu'expert en analyse de questions, reformulez cette requête en une question claire, précise et bien structurée.
+
+REQUÊTE ORIGINALE :
+{query}
+
+INSTRUCTIONS :
+- Clarifier l'intention de la question
+- Utiliser un langage précis et non ambigu
+- Maintenir tous les éléments importants de la requête originale
+- Structurer la question de manière logique
+- Ne pas ajouter d'informations non présentes dans la requête originale
+
+QUESTION CLARIFIÉE :"""
+
+    try:
+        clarified = ai_model.generate_response(model_type, api_key, prompt)
+        logging.info(f"Question clarifiée: {clarified}")
+        return clarified.strip()
+    except Exception as e:
+        logging.error(f"Erreur lors de la clarification de la question: {e}")
+        return query
 
 def reduceTextForDescriptions(text, context, length=100):
     """
@@ -66,19 +157,16 @@ Rédigez une description concise d'un livre en combinant le résumé suivant et 
 
 def generate_ai_response(query, documentation, additional_instructions="", api_key=None, model_type=None):
     """
-    Generates an AI response based on a user query and structured documentation.
-
-    :param query: User's query.
-    :param documentation: Structured documentation to base the response on.
-    :param additional_instructions: Additional instructions for the AI model.
-    :param api_key: API key for the AI model.
-    :param model_type: Type of AI model to use.
-    :return: AI-generated response.
+    Génère une réponse AI adaptée en fonction du type de question et des documents.
     """
     if api_key is None or model_type is None:
         raise ValueError("api_key and model_type must be provided")
 
-    prompt = f"""
+    # Analyse du type de question et des documents
+    analysis_prompt = f"""Analysez la question et la documentation fournie pour déterminer :
+1. Le type de question (comparative, explicative, analytique, factuelle, historique, etc.)
+2. Le type de documents fournis (techniques, historiques, légaux, religieux, etc.)
+3. La structure de réponse la plus appropriée
 
 QUESTION :
 {query}
@@ -86,72 +174,228 @@ QUESTION :
 DOCUMENTATION FOURNIE :
 {documentation}
 
-INSTRUCTIONS :
-- Fournissez une réponse précise basée sur les documents fournis.
-- Utilisez les résumés pour le contexte général.
-- Assurez la précision, la cohérence et citez toujours vos sources.
-- Format des citations :
-  - Page unique : [Document: {{nom}}, Page {{numéro}}]
-  - Plage de pages : [Document: {{nom}}, Pages {{début}}-{{fin}}]
-- Structure de la réponse :
-  - Synthèse globale.
-  - Analyse détaillée avec points clés.
-  - Conclusion.
-  - Sources utilisées
-  - Autres recherches associées.
-  - Limite de l'analyze.
-- Utilisez le Markdown pour la mise en forme avec titres, sous-titres et listes à puces.
+INSTRUCTIONS ADDITIONNELLES :
+{additional_instructions}
 
-{additional_instructions if additional_instructions else ""}
-
-RÉPONSE :
-"""
+FORMAT DE RÉPONSE REQUIS (respectez strictement ce format) :
+{{
+    "question_type": "type_de_question",
+    "document_types": ["type1", "type2"],
+    "recommended_structure": [
+        "section1",
+        "section2"
+    ]
+}}"""
 
     try:
+        # Analyse de la question et des documents
+        structure_analysis = ai_model.generate_response(
+            model_type,
+            api_key,
+            analysis_prompt,
+            system="Vous êtes un expert en analyse documentaire et structuration de réponses."
+        )
+        
+        # Extraire le JSON de la réponse
+        json_str = structure_analysis
+        if "```json" in json_str:
+            json_str = json_str.split("```json")[1].split("```")[0]
+        elif "```" in json_str:
+            json_str = json_str.split("```")[1].split("```")[0]
+        
+        # Nettoyer le JSON
+        json_str = json_str.strip()
+        
+        # Parser l'analyse JSON
+        try:
+            analysis = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logging.error(f"Erreur de parsing JSON: {e}")
+            logging.error(f"JSON string: {json_str}")
+            analysis = {
+                "question_type": "general",
+                "document_types": ["unknown"],
+                "recommended_structure": [
+                    "Synthèse globale",
+                    "Analyse détaillée",
+                    "Conclusion"
+                ]
+            }
+
+        # Validation des champs requis
+        if not all(key in analysis for key in ["question_type", "document_types", "recommended_structure"]):
+            raise ValueError("Structure JSON invalide")
+
+        # Génération des instructions de structure spécifiques
+        structure_instructions = "\n".join([f"# {section}" for section in analysis["recommended_structure"]])
+
+        # Prompt principal pour la génération de la réponse
+        main_prompt = f"""En tant qu'expert en analyse documentaire, générez une réponse structurée à la question suivante.
+
+QUESTION :
+{query}
+
+DOCUMENTATION FOURNIE :
+{documentation}
+
+TYPE DE QUESTION : {analysis["question_type"]}
+TYPES DE DOCUMENTS : {', '.join(analysis["document_types"])}
+
+STRUCTURE REQUISE :
+{structure_instructions}
+
+INSTRUCTIONS ADDITIONNELLES :
+{additional_instructions}
+
+DIRECTIVES GÉNÉRALES :
+- Utilisez le format Markdown pour la mise en forme
+- Citez précisément les sources (format : [Document: X, Page Y])
+- Restez objectif et précis
+- Respectez strictement la structure fournie
+- Adaptez le contenu de chaque section au contexte
+- Utilisez des sous-sections si nécessaire
+- Incluez des citations pertinentes des documents sources
+
+RÉPONSE :"""
+
+        # Génération de la réponse finale
         response = ai_model.generate_response(
             model_type,
             api_key,
-            prompt,system="Vous êtes un assistant expert en analyse documentaire, spécialisé dans l'extraction et la synthèse d'informations à partir de documents."
+            main_prompt,
+            system=f"Vous êtes un expert en analyse documentaire, spécialisé dans les documents de type {', '.join(analysis['document_types'])}."
         )
 
         if not response or not response.strip():
-            return """# Erreur de Génération
-
-## Problème Rencontré
-La génération de la réponse n'a pas produit de contenu valide.
-
-## Actions Suggérées
-1. Veuillez réessayer votre requête.
-2. Considérez reformuler votre question.
-3. Vérifiez si la documentation fournie contient les informations nécessaires."""
-
-        # Check for Markdown formatting
-        if not any(marker in response for marker in ['#', '##', '-', '*']):
-            response = f"""# Réponse à la Question
-
-## Contenu Principal
-{response}
-
-## Sources
-[Basé sur la documentation fournie]"""
+            return generate_error_response("La génération n'a pas produit de contenu valide.")
 
         return response
 
     except Exception as e:
-        error_message = f"""# Erreur Technique
+        logging.error(f"Erreur lors de la génération de la réponse : {str(e)}")
+        return generate_error_response(str(e))
 
-## Description
-Une erreur s'est produite lors du traitement de votre requête : {str(e)}
+def generate_error_response(error_message):
+    """
+    Génère une réponse formatée en cas d'erreur.
+    """
+    return f"""# Erreur de Génération
 
-## Suggestions
-1. Veuillez réessayer votre requête.
-2. Si l'erreur persiste, contactez le support technique.
+## Problème Rencontré
+{error_message}
+
+## Actions Suggérées
+1. Veuillez réessayer votre requête
+2. Considérez reformuler votre question
+3. Vérifiez si la documentation fournie contient les informations nécessaires
 
 ## État du Système
-- Type de modèle : {model_type}
-"""
-        logging.error(f"Erreur lors de la génération de la réponse : {str(e)}")
-        return error_message
+- Une erreur s'est produite lors du traitement
+- Les données peuvent être incomplètes ou incorrectes"""
+
+def generate_structure_instructions(question_type, document_types, recommended_structure, additional_instructions):
+    """
+    Génère des instructions de structure spécifiques selon le contexte.
+    """
+    structure_templates = {
+        "comparative": """
+# Synthèse comparative
+- Points clés de comparaison
+- Analyse des similitudes
+- Analyse des différences
+
+# Analyse détaillée
+- Critères de comparaison
+- Évaluation point par point
+- Tableau comparatif
+
+# Conclusion
+- Synthèse des différences principales
+- Recommandations
+
+# Sources et références
+# Limites de la comparaison""",
+
+        "explicative": """
+# Résumé
+- Contexte
+- Points clés
+
+# Explication détaillée
+- Concepts principaux
+- Mécanismes
+- Exemples
+
+# Implications
+# Sources
+# Pour aller plus loin""",
+
+        "analytique": """
+# Synthèse analytique
+- Contexte
+- Problématique principale
+
+# Analyse approfondie
+- Facteurs clés
+- Interactions
+- Impacts
+
+# Interprétation
+# Recommandations
+# Sources
+# Limites de l'analyse""",
+
+        "factuelle": """
+# Réponse directe
+# Contexte
+# Détails supplémentaires
+# Sources
+# Informations connexes""",
+
+        "general": """
+# Synthèse globale
+# Analyse détaillée
+# Conclusion
+# Sources utilisées
+# Autres recherches associées
+# Limites de l'analyse"""
+    }
+
+    # Sélection du template de base
+    base_structure = structure_templates.get(question_type.lower(), structure_templates["general"])
+
+    # Adaptation selon le type de document
+    if "technical" in document_types:
+        base_structure += "\n# Spécifications techniques"
+    if "legal" in document_types:
+        base_structure += "\n# Implications légales"
+    if "historical" in document_types:
+        base_structure += "\n# Contexte historique"
+
+    # Intégration des sections recommandées
+    for section in recommended_structure:
+        if section not in base_structure:
+            base_structure += f"\n# {section}"
+
+    return base_structure
+
+def generate_error_response(error_message):
+    """
+    Génère une réponse formatée en cas d'erreur.
+    """
+    return f"""# Erreur de Génération
+
+## Problème Rencontré
+{error_message}
+
+## Actions Suggérées
+1. Veuillez réessayer votre requête
+2. Considérez reformuler votre question
+3. Vérifiez si la documentation fournie contient les informations nécessaires
+
+## État du Système
+- Une erreur s'est produite lors du traitement
+- Les données peuvent être incomplètes ou incorrectes"""
     
 def generate_combined_documentation(documents):
     documentation = """<?xml version="1.0" encoding="UTF-8"?>
@@ -391,19 +635,17 @@ RÉSUMÉ :"""
     logging.info(description)
     return description, embedding
 
-def merge_responses(app,responses, query, max_tokens=8000):
+def merge_responses(app, responses, query, max_tokens=8000,additional_instructions=""):
     """
-    Fusionne les réponses partielles en plusieurs étapes si nécessaire.
-    
-    :param responses: Liste des réponses partielles
-    :param query: Question originale
-    :param max_tokens: Nombre maximum de tokens par lot
-    :return: Réponse finale fusionnée
+    Fusionne les réponses partielles en incluant les sections supplémentaires dans la fusion finale.
     """
     logging.info(f"Début de la fusion de {len(responses)} réponses")
     
     if len(responses) <= 1:
-        return responses[0]
+        response = responses[0]
+        # Ajouter les sections supplémentaires même pour une seule réponse
+        return add_additional_sections(response, query, app, additional_instructions)
+
 
     api_key = app['config']['API_KEY']
     intermediate_responses = []
@@ -424,7 +666,7 @@ INSTRUCTIONS :
 - Créez une synthèse unifiée et cohérente
 - Évitez les répétitions
 - Conservez toutes les informations pertinentes
-- Gardez les citations importantes
+- Gardez les citations importantes et les sources dans le format donné
 - Utilisez le format Markdown avec titres et sous-titres
 - Organisez la réponse de manière logique
 
@@ -497,9 +739,69 @@ RÉPONSE FUSIONNÉE :"""
         logging.info(f"Phase récursive : {len(intermediate_responses)} réponses intermédiaires restantes")
 
     final_response = intermediate_responses[0] if intermediate_responses else "Erreur lors de la fusion des réponses."
-    logging.info("Fusion des réponses terminée")
     
+    # Ajouter les sections supplémentaires à la réponse finale avec les instructions supplémentaires
+    final_response = add_additional_sections(final_response, query, app, additional_instructions)
+    
+    logging.info("Fusion des réponses terminée")
     return final_response
+
+def add_additional_sections(response, query, app, additional_instructions=""):
+    """
+    Ajoute les sections Limites de l'analyse et Autres recherches associées,
+    en tenant compte des instructions supplémentaires.
+    """
+    prompt = f"""En tant qu'expert en analyse documentaire, examinez la réponse suivante et créez une version améliorée
+qui intègre les instructions supplémentaires et ajoute deux sections importantes.
+
+QUESTION ORIGINALE :
+{query}
+
+INSTRUCTIONS SUPPLÉMENTAIRES :
+{additional_instructions}
+
+RÉPONSE ACTUELLE :
+{response}
+
+INSTRUCTIONS POUR LA VERSION FINALE :
+1. Intégrez les instructions supplémentaires dans la réponse principale
+2. Assurez-vous que la réponse répond aux exigences spécifiques des instructions
+3. Ajoutez une section "# Limites de l'analyse" qui identifie :
+   - Les limitations potentielles de l'analyse
+   - Les aspects non couverts par les documents
+   - Les incertitudes ou zones grises
+4. Ajoutez une section "# Autres recherches associées" qui suggère :
+   - Des pistes de recherche complémentaires
+   - Des aspects à approfondir
+   - Des sources additionnelles potentielles
+5. Utilisez le format Markdown
+6. Restez concis et pertinent
+
+RÉPONSE COMPLÈTE :"""
+
+    try:
+        enhanced_response = ai_model.generate_response(
+            app['config']['AI_MODEL_TYPE_FOR_REPONSE'],
+            app['config']['API_KEY'],
+            prompt
+        )
+        return enhanced_response
+    except Exception as e:
+        logging.error(f"Erreur lors de l'ajout des sections supplémentaires : {e}")
+        # En cas d'erreur, ajouter manuellement les sections
+        return f"""{response}
+
+# Limites de l'analyse
+- Les informations fournies sont basées sur les documents disponibles
+- Certains aspects peuvent nécessiter des sources supplémentaires
+- L'analyse peut être limitée par la portée des documents fournis
+- Les instructions supplémentaires peuvent ne pas être entièrement couvertes
+
+# Autres recherches associées
+- Consulter des sources complémentaires sur le sujet
+- Explorer les développements récents
+- Approfondir les aspects spécifiques mentionnés
+- Rechercher des informations supplémentaires selon les instructions données"""
 
 def estimate_tokens(text):
     """

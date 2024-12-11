@@ -2,7 +2,7 @@ import logging
 import os
 from threading import Thread
 from flask import Blueprint, jsonify, request, current_app
-from app.background_tasks import process_pdf
+from app.pdf_aiEncode import encode_pdf
 from app.services import BookService
 from app.utils.ai_utils import reduceTextForDescriptions
 from app.utils.auth_utils import token_required
@@ -84,7 +84,7 @@ def create_book_route(current_user):
             return jsonify({"error": "Failed to create book"}), 500
 
         # Lancement du traitement PDF en arrière-plan
-        thread = Thread(target=process_pdf, args=(
+        thread = Thread(target=encode_pdf, args=(
             current_app._get_current_object(),
             pdf_path,
             db_path,

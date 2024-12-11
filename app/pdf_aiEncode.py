@@ -48,7 +48,7 @@ def extract_images_from_page(doc, page, temp_dir):
             logging.error(f"Erreur lors de l'extraction de l'image xref {xref} à la page {page.number + 1}: {e}")
     return images
 
-def process_pdf(app, pdf_path, db_path, file_name, begin, end, illustration):
+def encode_pdf(app, pdf_path, db_path, file_name, begin, end, illustration):
     """
     Traite un document PDF pour en extraire le contenu et les images, générer des descriptions
     et sauvegarder les résultats.

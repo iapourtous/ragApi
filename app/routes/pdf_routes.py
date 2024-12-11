@@ -19,8 +19,8 @@ from app.utils.images_utils import convert_pdf_page_to_image
 from app.utils.vector_utils import compare_query_to_descriptions, serialize_tensor
 from app.utils.file_utils import load_processed_data, save_processed_data
 from app.utils.ai_utils import reduceTextForDescriptions
-from app.pdf_processing import process_query
-from app.background_tasks import process_pdf
+from app.pdf_aiProcessing import process_query
+from app.pdf_aiEncode import encode_pdf
 from app.services import BookService
 from app.config import extract_config
 
@@ -217,7 +217,7 @@ def get_similarity_by_title(current_user, title):
 
 @pdf_bp.route("/process", methods=["POST"])
 @token_required
-def process_pdf_route(current_user):
+def encode_pdf_route(current_user):
     """
     Traite une requête d'analyse de documents PDF.
     
@@ -338,7 +338,7 @@ def batch_process_pdfs(current_user):
             if not all([pdf_path, db_path, filename]):
                 continue
 
-            thread = Thread(target=process_pdf, args=(
+            thread = Thread(target=encode_pdf, args=(
                 current_app._get_current_object(),
                 pdf_path,
                 db_path,
@@ -464,7 +464,7 @@ def create_book_route(current_user):
             return jsonify({"error": "Failed to create book"}), 500
 
         # Lancement du traitement PDF en arrière-plan
-        thread = Thread(target=process_pdf, args=(
+        thread = Thread(target=encode_pdf, args=(
             current_app._get_current_object(),
             pdf_path,
             db_path,
