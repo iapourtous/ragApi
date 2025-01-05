@@ -13,7 +13,6 @@ from .ai_utils import (
     merge_responses,
 )
 from .file_utils import load_processed_data
-from ..services.queryData_service import QueryDataService
 
 def extract_keywords(query, send_progress):
     send_progress("Extraction des mots-clés...")
@@ -231,6 +230,9 @@ def process_batch(batch_data, api_key, model_type):
 def generate_partial_responses(batches_to_process, api_key, model_type_for_response, send_progress):
     send_progress("Génération de la réponse par lot...")
     partial_responses = []
+    total_batches = len(batches_to_process)
+    completed_count = 0
+
     with ThreadPoolExecutor() as executor:
         future_to_batch = {
             executor.submit(
@@ -240,20 +242,37 @@ def generate_partial_responses(batches_to_process, api_key, model_type_for_respo
                 model_type_for_response
             ): batch_data for batch_data in batches_to_process
         }
+
         for future in as_completed(future_to_batch):
             try:
                 response = future.result()
+                completed_count += 1
                 if response:
                     partial_responses.append(response)
                     logging.info("Partial response received")
+                    # Envoi de la progression détaillée
+                    send_progress(f"Réception de la réponse partielle {completed_count}/{total_batches}...")
             except Exception as exc:
                 logging.error(f"Batch generated an exception: {exc}")
+                # On compte tout de même cette tentative de traitement comme terminée
+                # même si elle a échoué, afin de ne pas fausser le décompte
+                send_progress(f"Erreur lors du traitement d'une réponse partielle {completed_count+1}/{total_batches}.")
+                completed_count += 1
 
     return partial_responses
 
-def merge_all_responses(app, partial_responses, query, additional_instructions=""):
+def merge_all_responses(app, partial_responses, query, additional_instructions="", send_progress=None, add_section=True):
     logging.info("Fusion des réponses partielles...")
-    final_response = merge_responses(app, partial_responses, query, max_tokens=14000, additional_instructions=additional_instructions)
+    # Ajout du paramètre send_progress dans l'appel à merge_responses
+    final_response = merge_responses(
+        app, 
+        partial_responses, 
+        query, 
+        max_tokens=14000, 
+        additional_instructions=additional_instructions,
+        send_progress=send_progress,
+        add_section=add_section
+    )
     return final_response
 
 def save_response_to_db(query_service, query, vector_to_compare, response_data, send_progress):

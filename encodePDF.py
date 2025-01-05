@@ -14,7 +14,7 @@ from app.models.vllm_openai_model import VLLMOpenAIModel
 from app.utils.ai_utils import correct_ocr_text
 from app.utils.file_utils import save_processed_data
 from app.utils.text_utils import del_pages_number
-from pdf_aiEncode import extract_images_from_page
+from app.pdf_aiEncode import extract_images_from_page
 
 # Configuration du logging
 logging.basicConfig(

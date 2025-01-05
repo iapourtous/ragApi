@@ -635,25 +635,31 @@ RÉSUMÉ :"""
     logging.info(description)
     return description, embedding
 
-def merge_responses(app, responses, query, max_tokens=8000,additional_instructions=""):
+def merge_responses(app, responses, query, max_tokens=8000, additional_instructions="", send_progress=None, add_section=True):
     """
-    Fusionne les réponses partielles en incluant les sections supplémentaires dans la fusion finale.
+    Fusionne les réponses partielles en incluant les sections supplémentaires.
     """
     logging.info(f"Début de la fusion de {len(responses)} réponses")
+
+    if send_progress:
+        send_progress(f"Début de la fusion de {len(responses)} réponses partielles...")
     
     if len(responses) <= 1:
         response = responses[0]
-        # Ajouter les sections supplémentaires même pour une seule réponse
-        return add_additional_sections(response, query, app, additional_instructions)
-
+        if send_progress:
+            send_progress("Une seule réponse partielle détectée, pas de fusion nécessaire.")
+        return add_additional_sections(response, query, app, additional_instructions, add_section)
 
     api_key = app['config']['API_KEY']
     intermediate_responses = []
     current_batch = []
     current_tokens = 0
 
-    def merge_batch(batch):
+    def merge_batch(batch, batch_count, total_batches):
         """Fusionne un lot de réponses."""
+        if send_progress:
+            send_progress(f"Fusion du lot {batch_count}/{total_batches} en cours...")
+            
         batch_prompt = f"""En tant qu'expert en synthèse documentaire, fusionnez les réponses partielles suivantes en une réponse cohérente et complète.
 
 QUESTION ORIGINALE :
@@ -673,84 +679,123 @@ INSTRUCTIONS :
 RÉPONSE FUSIONNÉE :"""
 
         try:
-            return ai_model.generate_response(
+            merged = ai_model.generate_response(
                 app['config']['AI_MODEL_TYPE_FOR_REPONSE'],
                 api_key,
                 batch_prompt
             )
+            if send_progress:
+                send_progress(f"Lot {batch_count}/{total_batches} fusionné avec succès.")
+            return merged
         except Exception as e:
             logging.error(f"Erreur lors de la fusion d'un lot : {e}")
+            if send_progress:
+                send_progress(f"Erreur lors de la fusion du lot {batch_count}/{total_batches}.")
             return None
 
     # Première phase : fusion par lots
-    for response in responses:
+    total_responses = len(responses)
+    batch_count = 0
+    for i, response in enumerate(responses, start=1):
         estimated_tokens = estimate_tokens(response)
-        
         if current_tokens + estimated_tokens > max_tokens:
+            # Fusion du batch précédent avant d'ajouter la réponse actuelle
             if current_batch:
-                logging.info(f"Fusion d'un lot de {len(current_batch)} réponses")
-                merged = merge_batch("\n\n---\n\n".join(current_batch))
+                batch_count += 1
+                merged = merge_batch("\n\n---\n\n".join(current_batch), batch_count, "?")
                 if merged:
                     intermediate_responses.append(merged)
                 current_batch = [response]
                 current_tokens = estimated_tokens
+            else:
+                # Si la réponse seule dépasse le seuil, on tente de la fusionner directement.
+                batch_count += 1
+                merged = merge_batch(response, batch_count, "?")
+                if merged:
+                    intermediate_responses.append(merged)
+                current_tokens = 0
+                current_batch = []
         else:
             current_batch.append(response)
             current_tokens += estimated_tokens
 
     # Traiter le dernier lot de la première phase
     if current_batch:
-        logging.info(f"Fusion du dernier lot de {len(current_batch)} réponses")
-        merged = merge_batch("\n\n---\n\n".join(current_batch))
+        batch_count += 1
+        merged = merge_batch("\n\n---\n\n".join(current_batch), batch_count, "?")
         if merged:
             intermediate_responses.append(merged)
 
-    logging.info(f"Première phase : {len(intermediate_responses)} réponses intermédiaires générées")
+    if send_progress:
+        send_progress(f"Première phase terminée : {len(intermediate_responses)} réponses intermédiaires générées")
 
     # Deuxième phase : fusion récursive des réponses intermédiaires si nécessaire
+    recursion_round = 1
     while len(intermediate_responses) > 1:
+        if send_progress:
+            send_progress(f"Début de la phase de fusion récursive {recursion_round} avec {len(intermediate_responses)} réponses intermédiaires...")
+        
         new_intermediate_responses = []
         current_batch = []
         current_tokens = 0
+        batch_count = 0
+        total_batches = len(intermediate_responses)
 
-        for response in intermediate_responses:
+        for i, response in enumerate(intermediate_responses, start=1):
             estimated_tokens = estimate_tokens(response)
-            
             if current_tokens + estimated_tokens > max_tokens:
                 if current_batch:
-                    logging.info(f"Fusion récursive d'un lot de {len(current_batch)} réponses")
-                    merged = merge_batch("\n\n---\n\n".join(current_batch))
+                    batch_count += 1
+                    merged = merge_batch("\n\n---\n\n".join(current_batch), batch_count, total_batches)
                     if merged:
                         new_intermediate_responses.append(merged)
                     current_batch = [response]
                     current_tokens = estimated_tokens
+                else:
+                    # Même logique que précédemment si une seule réponse dépasse le seuil
+                    batch_count += 1
+                    merged = merge_batch(response, batch_count, total_batches)
+                    if merged:
+                        new_intermediate_responses.append(merged)
+                    current_tokens = 0
+                    current_batch = []
             else:
                 current_batch.append(response)
                 current_tokens += estimated_tokens
 
         # Traiter le dernier lot
         if current_batch:
-            logging.info(f"Fusion récursive du dernier lot de {len(current_batch)} réponses")
-            merged = merge_batch("\n\n---\n\n".join(current_batch))
+            batch_count += 1
+            merged = merge_batch("\n\n---\n\n".join(current_batch), batch_count, total_batches)
             if merged:
                 new_intermediate_responses.append(merged)
 
         intermediate_responses = new_intermediate_responses
-        logging.info(f"Phase récursive : {len(intermediate_responses)} réponses intermédiaires restantes")
+        if send_progress:
+            send_progress(f"Fin de la phase récursive {recursion_round}, {len(intermediate_responses)} réponses restantes.")
+        recursion_round += 1
 
     final_response = intermediate_responses[0] if intermediate_responses else "Erreur lors de la fusion des réponses."
+
+    if send_progress:
+        send_progress("Fusion des réponses intermédiaires terminée, ajout des sections supplémentaires...")
+
+    final_response = add_additional_sections(final_response, query, app, additional_instructions, add_section)
     
-    # Ajouter les sections supplémentaires à la réponse finale avec les instructions supplémentaires
-    final_response = add_additional_sections(final_response, query, app, additional_instructions)
-    
+    if send_progress:
+        send_progress("Fusion terminée.")
+
     logging.info("Fusion des réponses terminée")
     return final_response
 
-def add_additional_sections(response, query, app, additional_instructions=""):
+def add_additional_sections(response, query, app, additional_instructions="", add_section=True):
     """
     Ajoute les sections Limites de l'analyse et Autres recherches associées,
     en tenant compte des instructions supplémentaires.
     """
+    if not add_section:
+        return response
+
     prompt = f"""En tant qu'expert en analyse documentaire, examinez la réponse suivante et créez une version améliorée
 qui intègre les instructions supplémentaires et ajoute deux sections importantes.
 

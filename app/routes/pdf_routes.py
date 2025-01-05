@@ -107,9 +107,20 @@ def serve_pdf(subpath, filename):
         File: Fichier PDF demandé
         404: Si le fichier n'existe pas
     """
+    # Essayer d'abord le chemin direct
     full_path = os.path.join(current_app.config['PDF_FOLDER'], subpath, filename)
     if os.path.exists(full_path) and os.path.commonpath([full_path, current_app.config['PDF_FOLDER']]) == current_app.config['PDF_FOLDER']:
         return send_from_directory(current_app.config['PDF_FOLDER'], os.path.join(subpath, filename))
+    
+    # Si non trouvé, rechercher dans tous les sous-répertoires
+    for root, dirs, files in os.walk(current_app.config['PDF_FOLDER']):
+        if filename in files:
+            relative_path = os.path.relpath(root, current_app.config['PDF_FOLDER'])
+            file_path = os.path.join(relative_path, filename)
+            if relative_path == '.':
+                file_path = filename
+            return send_from_directory(current_app.config['PDF_FOLDER'], file_path)
+    
     abort(404)
 
 @pdf_bp.route('/title/<title>/descriptions', methods=['GET'])

@@ -4,7 +4,6 @@ import tempfile
 import logging
 import base64
 import os
-
 import fitz
 
 

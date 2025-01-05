@@ -12,7 +12,7 @@ def init_routes(app):
 
     # Enregistrer les blueprints
     app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(blog_bp, url_prefix='/blogs')
+    app.register_blueprint(blog_bp, url_prefix='/blog')
     app.register_blueprint(book_bp, url_prefix='/books')
     app.register_blueprint(pdf_bp, url_prefix='/pdf')
     app.register_blueprint(user_bp, url_prefix='/users')
