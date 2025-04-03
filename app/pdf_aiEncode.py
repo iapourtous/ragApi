@@ -1,3 +1,11 @@
+"""
+Module d'encodage et d'extraction de contenu des documents PDF pour l'application RAG API.
+
+Ce module fournit des fonctions pour extraire, traiter et encoder le contenu des
+documents PDF, incluant le texte et les images. Il génère des descriptions 
+hiérarchiques du contenu, corrige le texte extrait par OCR, et traite les images
+pour en extraire des descriptions textuelles.
+"""
 from .models.files_book import FilesBook
 from .utils.text_utils import del_pages_number
 from .utils.file_utils import save_processed_data, load_partial_data, save_partial_data, remove_partial_data

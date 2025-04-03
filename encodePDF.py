@@ -1,3 +1,11 @@
+"""
+Script d'encodage de documents PDF pour l'application RAG API.
+
+Ce script permet de traiter des fichiers PDF en extrayant et vectorisant leur contenu.
+Il offre une interface utilisateur en ligne de commande pour sélectionner et configurer
+le traitement des fichiers. Le traitement inclut l'extraction de texte, la correction OCR,
+la vectorisation, et optionnellement l'extraction et la description d'images.
+"""
 import curses
 import os
 import json

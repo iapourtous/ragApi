@@ -5,6 +5,7 @@ import jwt
 from app.services import UserService
 from app.utils.auth_utils import token_required
 from app.utils.recaptcha_utils import verify_recaptcha
+from app.dto.auth_dto import LoginRequestDTO, RegistrationRequestDTO, AuthResponseDTO
 
 auth_bp = Blueprint('auth', __name__)
 user_service = UserService()
@@ -23,37 +24,48 @@ def login():
         400: Si le token reCAPTCHA est manquant
         403: Si la validation reCAPTCHA échoue
     """        
-    auth = request.json
+    # Conversion de la requête JSON en DTO
+    login_request = LoginRequestDTO.from_dict(request.json)
     
-        # Vérification reCAPTCHA
-    recaptcha_token = auth.get("captchaToken")
-    if not recaptcha_token:
+    # Validation des données
+    if not login_request.username or not login_request.password:
+        return jsonify({'message': 'Username and password are required'}), 401
+    
+    # Vérification reCAPTCHA
+    if not login_request.captcha_token:
         return jsonify({"message": "reCAPTCHA token is missing"}), 400
     
-    success, score = verify_recaptcha(recaptcha_token,"login")
-    logging.info(f"Srore:{score}")
+    success, score = verify_recaptcha(login_request.captcha_token, "login")
+    logging.info(f"Score: {score}")
     if not success or score < 0.5:
         return jsonify({"message": "Failed reCAPTCHA validation"}), 403
-        
     
-    if not auth or not auth.get('username') or not auth.get('password'):
-        return jsonify({'message': 'Could not verify'}), 401
-
-    user = user_service.get_user_by_username(auth.get('username'))
+    # Récupération de l'utilisateur
+    user = user_service.get_user_by_username(login_request.username)
     if not user:
         return jsonify({'message': 'User not found'}), 401
 
-    if user.check_password(auth.get('password')):
+    # Vérification du mot de passe
+    if user.check_password(login_request.password):
+        # Vérifier si l'ID existe et l'utiliser dans le token
+        user_id = str(user.id) if hasattr(user, 'id') else ''
+        
         token = jwt.encode({
             'username': user.username,
             'role': user.role,
+            'id': user_id,
             'exp': datetime.utcnow() + timedelta(minutes=30)
         }, current_app.config['SECRET_KEY'], algorithm="HS256")
 
-        return jsonify({
-            'token': token.decode('UTF-8') if isinstance(token, bytes) else token,
-            'role': user.role
-        })
+        # Création du DTO de réponse
+        auth_response = AuthResponseDTO(
+            token=token.decode('UTF-8') if isinstance(token, bytes) else token,
+            role=user.role,
+            username=user.username,
+            user_id=user_id
+        )
+
+        return jsonify(auth_response.to_dict())
 
     return jsonify({'message': 'Invalid credentials'}), 401
     
@@ -71,47 +83,55 @@ def register():
         500: En cas d'erreur serveur
     """
     try: 
-        data = request.json
-        username = data.get('username')
-        password = data.get('password')
-        email = data.get('email')
-        recaptcha_token = data.get('captchaToken')
+        # Conversion de la requête JSON en DTO
+        registration_request = RegistrationRequestDTO.from_dict(request.json)
         
-        if not recaptcha_token:
+        # Validation des données
+        if not registration_request.username or not registration_request.password or not registration_request.email:
+            return jsonify({'message': 'Username, password and email are required'}), 400
+        
+        # Vérification reCAPTCHA
+        if not registration_request.captcha_token:
             return jsonify({"message": "reCAPTCHA token is missing"}), 400
 
         # Validation reCAPTCHA
-        success, score = verify_recaptcha(recaptcha_token,"signup")
+        success, score = verify_recaptcha(registration_request.captcha_token, "signup")
         if not success or score < 0.8:
             return jsonify({"message": "Failed reCAPTCHA validation"}), 403           
 
         # Vérifier si l'utilisateur existe déjà
-        if user_service.get_user_by_username(username):
+        if user_service.get_user_by_username(registration_request.username):
             return jsonify({'message': 'Username already exists'}), 400
             
-        if user_service.get_user_by_email(email):
+        if user_service.get_user_by_email(registration_request.email):
             return jsonify({'message': 'Email already exists'}), 400
 
         # Créer le nouvel utilisateur
-        success, message = user_service.create_user(
-            username=username,
-            password=password,
-            email=email,
-            role='user'  # Par défaut, les nouveaux utilisateurs ont le rôle 'user'
+        success, message, user_id = user_service.create_user(
+            username=registration_request.username,
+            password=registration_request.password,
+            email=registration_request.email,
+            role=registration_request.role
         )
 
         if success:
             # Générer un token pour le nouvel utilisateur
             token = jwt.encode({
-                'username': username,
-                'role': 'user',
+                'username': registration_request.username,
+                'role': registration_request.role,
+                'id': str(user_id),
                 'exp': datetime.utcnow() + timedelta(minutes=30)
             }, current_app.config['SECRET_KEY'], algorithm="HS256")
 
-            return jsonify({
-                'message': 'User created successfully',
-                'token': token
-            }), 201
+            # Création du DTO de réponse
+            auth_response = AuthResponseDTO(
+                token=token.decode('UTF-8') if isinstance(token, bytes) else token,
+                role=registration_request.role,
+                username=registration_request.username,
+                user_id=str(user_id)
+            )
+
+            return jsonify(auth_response.to_dict()), 201
         else:
             return jsonify({'message': message}), 400
 
@@ -136,20 +156,19 @@ def protected(current_user):
         new_token = jwt.encode({
             'username': current_user['username'],
             'role': current_user['role'],
+            'id': current_user.get('id', ''),
             'exp': datetime.utcnow() + timedelta(minutes=30)
         }, current_app.config['SECRET_KEY'], algorithm="HS256")
 
-        # Préparer la réponse
-        response_data = {
-            'message': 'Token is valid',
-            'token': new_token.decode('UTF-8') if isinstance(new_token, bytes) else new_token,
-            'user': {
-                'username': current_user['username'],
-                'role': current_user['role']
-            }
-        }
+        # Création du DTO de réponse
+        auth_response = AuthResponseDTO(
+            token=new_token.decode('UTF-8') if isinstance(new_token, bytes) else new_token,
+            role=current_user['role'],
+            username=current_user['username'],
+            user_id=current_user.get('id', '')
+        )
 
-        return jsonify(response_data), 200
+        return jsonify(auth_response.to_dict()), 200
 
     except Exception as e:
         return jsonify({'message': 'Error refreshing token', 'error': str(e)}), 500

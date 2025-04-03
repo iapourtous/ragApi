@@ -1,3 +1,12 @@
+"""
+Module de traitement et d'amélioration des requêtes pour l'application RAG API.
+
+Ce module fournit des fonctionnalités pour raffiner, clarifier et décomposer des requêtes
+utilisateurs complexes. Il implémente différentes stratégies de traitement comme la
+clarification contextuelle, la génération de sous-questions, le traitement parallèle
+de sous-requêtes et la fusion intelligente des résultats pour améliorer la qualité
+des réponses générées.
+"""
 # app/utils/query_processor.py
 
 import logging
@@ -8,6 +17,21 @@ class QueryProcessor:
     def process_subquery(app, subquery, files, new_generate, additional_instructions, max_page, progress_callback):
         """
         Traite une sous-question comme une requête indépendante.
+        
+        Cette méthode prend une sous-question générée et la traite comme une requête
+        à part entière, tout en évitant les problèmes de récursion.
+        
+        Args:
+            app: Configuration de l'application
+            subquery: La sous-question à traiter
+            files: Liste des fichiers à analyser
+            new_generate: Indicateur pour forcer une nouvelle génération
+            additional_instructions: Instructions additionnelles pour le LLM
+            max_page: Nombre maximal de pages à considérer
+            progress_callback: Fonction de rappel pour suivre la progression
+            
+        Returns:
+            str: Réponse générée pour la sous-question
         """
         try:
             # Import local pour éviter l'importation circulaire
@@ -36,6 +60,18 @@ class QueryProcessor:
     def clarify_question_infinity(query, file_books, api_key, model_type):
         """
         Clarifie la question en tenant compte du contexte des livres disponibles.
+        
+        Cette méthode reformule et précise la question de l'utilisateur en fonction
+        du contenu des livres disponibles pour améliorer la pertinence des résultats.
+        
+        Args:
+            query: La question originale
+            file_books: Liste de dictionnaires contenant les informations sur les livres disponibles
+            api_key: Clé API pour le modèle LLM
+            model_type: Type de modèle LLM à utiliser
+            
+        Returns:
+            str: Question clarifiée et reformulée
         """
         books_context = "\n\n".join([
             f"Livre: {book['filename']}\nDescription: {book['description']}"
@@ -71,6 +107,18 @@ class QueryProcessor:
     def generate_subquestions(query, file_books, api_key, model_type):
         """
         Décompose une question complexe en sous-questions plus spécifiques.
+        
+        Cette méthode analyse la complexité de la question et, si nécessaire,
+        la décompose en plusieurs sous-questions pour un traitement plus précis.
+        
+        Args:
+            query: La question à décomposer
+            file_books: Liste de dictionnaires contenant les informations sur les livres disponibles
+            api_key: Clé API pour le modèle LLM
+            model_type: Type de modèle LLM à utiliser
+            
+        Returns:
+            list: Liste des sous-questions ou None si la décomposition n'est pas nécessaire
         """
         books_context = "\n\n".join([
             f"Livre: {book['filename']}\nDescription: {book['description']}"
@@ -120,6 +168,19 @@ class QueryProcessor:
     def improve_with_subanswers(final_response, sub_responses, api_key, model_type):
         """
         Améliore la réponse finale en intégrant les réponses aux sous-questions.
+        
+        Cette méthode analyse les réponses obtenues pour chaque sous-question
+        et les intègre intelligemment à la réponse principale pour former
+        une réponse complète et cohérente.
+        
+        Args:
+            final_response: Réponse principale générée
+            sub_responses: Réponses à toutes les sous-questions
+            api_key: Clé API pour le modèle LLM
+            model_type: Type de modèle LLM à utiliser
+            
+        Returns:
+            str: Réponse améliorée et enrichie
         """
         
         prompt = f"""En tant qu'expert en synthèse documentaire, ton rôle est d'identifier UNIQUEMENT les informations complémentaires des sous-réponses qui peuvent enrichir la réponse principale.

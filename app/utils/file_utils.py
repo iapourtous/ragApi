@@ -1,3 +1,12 @@
+"""
+Module d'utilitaires pour la gestion des fichiers dans l'application RAG API.
+
+Ce module fournit des fonctions pour charger, sauvegarder et manipuler des fichiers
+de données traités. Il gère à la fois le cache en mémoire (pour des accès rapides)
+et les opérations sur le disque (pour la persistance). Les fonctions incluent le
+chargement et la sauvegarde de données traitées, la gestion de fichiers partiels
+pour la reprise de traitement, et la vérification/création de répertoires.
+"""
 import os
 import json
 import logging

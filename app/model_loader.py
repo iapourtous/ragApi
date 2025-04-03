@@ -1,3 +1,10 @@
+"""
+Module de chargement des modèles d'IA pour l'application RAG API.
+
+Ce module fournit les fonctions nécessaires pour initialiser, exporter et
+récupérer le modèle de vectorisation pour la recherche sémantique. Il utilise
+SentenceTransformer avec un backend OpenVINO pour optimiser les performances.
+"""
 import torch
 from sentence_transformers import SentenceTransformer
 import logging

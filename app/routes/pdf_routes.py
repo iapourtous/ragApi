@@ -1,11 +1,11 @@
 """
-Routes pour le traitement et l'analyse des documents PDF.
+Module de routes pour le traitement et l'analyse des documents PDF.
 
-Ce module gère toutes les routes liées au traitement des PDF, incluant :
-- L'analyse de documents
-- La génération de descriptions
-- Le calcul de similarités
-- La gestion des images de pages
+Ce module expose les endpoints de l'API liés aux opérations sur les documents PDF,
+incluant le téléchargement, le traitement, l'encodage, l'extraction d'informations,
+la génération de prévisualisations et l'analyse RAG (Retrieval Augmented Generation).
+Il gère également le streaming des résultats via Server-Sent Events pour les
+traitements longs.
 """
 
 import json
@@ -224,48 +224,6 @@ def get_similarity_by_title(current_user, title):
 
     except Exception as e:
         logging.error(f"Error in similarity calculation: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@pdf_bp.route("/process", methods=["POST"])
-@token_required
-def encode_pdf_route(current_user):
-    """
-    Traite une requête d'analyse de documents PDF.
-    
-    Args:
-        current_user (dict): Informations sur l'utilisateur courant
-        
-    Returns:
-        JSON: Résultats de l'analyse
-        400: Si les paramètres requis sont manquants
-        500: En cas d'erreur serveur
-    """
-    try:
-        data = request.json
-        query = data.get("query")
-        files = data.get("files")
-        max_page = data.get("max_page")
-        new_generate = data.get("new", "")
-        additional_instructions = data.get("additional_instructions", "")
-
-        if not query or not files:
-            return jsonify({"error": "Query and files are required"}), 400
-
-        if not isinstance(files, list):
-            return jsonify({"error": "Files should be a list"}), 400
-
-        response_data = process_query(
-            current_app, 
-            query, 
-            files, 
-            new_generate, 
-            additional_instructions, 
-            max_page
-        )
-        return response_data
-
-    except Exception as e:
-        logging.error(f"Error in process_pdf_route: {e}")
         return jsonify({"error": str(e)}), 500
 
 @pdf_bp.route('/generate-preview', methods=['POST'])

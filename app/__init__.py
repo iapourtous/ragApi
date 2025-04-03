@@ -1,3 +1,10 @@
+"""
+Module principal d'initialisation de l'application RAG API.
+
+Ce module contient la fonction factory pour créer et configurer l'instance
+de l'application Flask. Il gère l'initialisation du CORS, la configuration,
+le chargement des modèles d'IA, la mise en place des routes et des services.
+"""
 from flask import Flask
 from flask_cors import CORS
 from .services.sevice_manager import ServiceManager

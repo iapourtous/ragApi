@@ -1,3 +1,10 @@
+"""
+Module de définition du modèle de données pour les livres dans l'application RAG API.
+
+Ce module contient la classe DBBook qui représente un livre dans la base de données
+MongoDB. Il fournit les méthodes pour créer, sérialiser et désérialiser des objets
+livre, avec leurs métadonnées et chemins vers les ressources associées.
+"""
 from datetime import datetime
 
 class DBBook:

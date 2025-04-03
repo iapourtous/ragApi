@@ -1,3 +1,12 @@
+"""
+Module d'utilitaires pour le traitement de texte dans l'application RAG API.
+
+Ce module fournit des fonctions pour le traitement, la normalisation et l'analyse de textes.
+Il inclut des outils pour la normalisation des caractères, la recherche de mots-clés,
+la segmentation de textes en fragments gérables, et la vectorisation des requêtes textuelles.
+Ces fonctions sont essentielles pour les opérations de recherche, filtrage et
+préparation des données textuelles dans le pipeline RAG.
+"""
 import re
 import unicodedata
 
@@ -122,8 +131,9 @@ def vectorize_query(query, model):
     :param model: Modèle de vectorisation utilisé pour encoder la requête.
     :return: Vecteur de la requête sous forme de tenseur PyTorch.
     """
-    # Encodage de la requête avec un préfixe pour contextualiser la vectorisation
-    return model.encode("query: " + query, convert_to_tensor=True, normalize_embeddings=True)
+    # Utilise la fonction commune de vectorisation du module vector_utils
+    from .vector_utils import vectorize_text
+    return vectorize_text(query, model, prefix="query: ", chunk_content=False)
 
 def del_pages_number(text):
     """

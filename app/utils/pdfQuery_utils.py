@@ -1,32 +1,99 @@
+"""
+Module d'utilitaires pour les requêtes sur les documents PDF.
+
+Ce module fournit des fonctions pour l'extraction, la vectorisation, et l'analyse
+de requêtes textuelles sur des documents PDF préalablement traités. Il gère le 
+pipeline complet de recherche, incluant l'extraction de mots-clés, la vectorisation,
+la recherche dans le cache, le chargement et le scoring des fichiers, le filtrage des 
+correspondances, et la génération de réponses via des modèles d'IA.
+
+Functions:
+    extract_keywords: Extrait les mots-clés importants d'une requête.
+    vectorize_user_query: Vectorise une requête utilisateur.
+    check_cache: Vérifie si une réponse existe dans le cache.
+    load_and_score_files: Charge les fichiers et évalue leur pertinence.
+    filter_matches_by_score_and_page: Filtre les correspondances par score et numéro de page.
+    llm_filter_matches: Filtre les correspondances à l'aide d'un modèle de langage.
+    prepare_batches_for_llm: Prépare les lots pour le traitement par le LLM.
+    process_batch: Traite un lot de données pour générer une réponse partielle.
+    generate_partial_responses: Génère des réponses partielles en parallèle.
+    merge_all_responses: Fusionne toutes les réponses partielles.
+    save_response_to_db: Sauvegarde la réponse dans la base de données.
+"""
+
 import logging
-import time
 import torch
 from sentence_transformers import util
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from app.models import ai_model
 from .text_utils import contain_key, search_upper_words, vectorize_query
 from .ai_utils import (
     estimate_tokens,
     generate_ai_response,
     generate_combined_documentation,
     merge_responses,
+    llm_filter_matches,
 )
 from .file_utils import load_processed_data
 
 def extract_keywords(query, send_progress):
+    """
+    Extrait les mots-clés importants d'une requête utilisateur.
+    
+    Cette fonction analyse la requête pour en extraire les mots les plus significatifs,
+    qui seront utilisés pour filtrer les documents pertinents.
+    
+    Args:
+        query (str): La requête utilisateur à analyser.
+        send_progress (callable): Fonction de callback pour signaler la progression.
+        
+    Returns:
+        list: Liste des mots-clés extraits de la requête.
+    """
     send_progress("Extraction des mots-clés...")
     most_words = search_upper_words(query)
     logging.info(f"Extracted keywords: {most_words}")
     return most_words
 
 def vectorize_user_query(query, model, send_progress):
+    """
+    Vectorise une requête utilisateur à l'aide d'un modèle d'embedding.
+    
+    Transforme la requête textuelle en un vecteur numérique pour permettre
+    la comparaison avec les vecteurs des documents.
+    
+    Args:
+        query (str): La requête utilisateur à vectoriser.
+        model: Le modèle d'embedding à utiliser pour la vectorisation.
+        send_progress (callable): Fonction de callback pour signaler la progression.
+        
+    Returns:
+        torch.Tensor: Vecteur représentant la requête utilisateur.
+    """
     send_progress("Vectorisation de la requête...")
     vector_to_compare = vectorize_query(query, model)
     logging.info("Query vectorization completed")
     return vector_to_compare
 
 def check_cache(query, most_words, vector_to_compare, query_service, device, new_generate, send_progress):
+    """
+    Vérifie si une réponse similaire existe déjà dans le cache.
+    
+    Cette fonction recherche dans la base de données des requêtes précédentes
+    une requête similaire à celle soumise par l'utilisateur, en utilisant
+    à la fois les mots-clés et la similarité vectorielle.
+    
+    Args:
+        query (str): La requête utilisateur.
+        most_words (list): Liste des mots-clés extraits de la requête.
+        vector_to_compare (torch.Tensor): Vecteur de la requête utilisateur.
+        query_service: Service de gestion des requêtes en base de données.
+        device (str): Dispositif de calcul à utiliser (CPU/GPU).
+        new_generate (str): Si "new", ignore le cache et force une nouvelle génération.
+        send_progress (callable): Fonction de callback pour signaler la progression.
+        
+    Returns:
+        dict or None: La réponse mise en cache si trouvée, None sinon.
+    """
     if new_generate != "new":
         send_progress("Vérification du cache...")
         logging.info("Searching in cache...")
@@ -140,12 +207,7 @@ def filter_matches_by_score_and_page(leaf_matches, tree_matches, max_page):
     MAX_MATCHES = int(max_page)
     return all_matches[:MAX_MATCHES]
 
-def llm_filter_matches(initial_matches, query, api_key, model_type_for_filter, send_progress):
-    """
-    Utilise le filtrage LLM optimisé depuis ai_utils.
-    """
-    from .ai_utils import llm_filter_matches as ai_llm_filter
-    return ai_llm_filter(initial_matches, query, api_key, model_type_for_filter, send_progress)
+# Suppression du wrapper et import direct de la fonction pour éviter la duplication
 
 def prepare_batches_for_llm(query, all_matches, file_books, send_progress):
     send_progress("Préparation des lots pour la génération de la réponse...")

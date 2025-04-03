@@ -74,6 +74,26 @@ class BookService:
         except Exception as e:
             logging.error(f"Erreur lors de la récupération du livre : {e}")
             return None
+            
+    def get_book_by_id(self, book_id):
+        """
+        Récupère un livre par son ID et le convertit en objet DBBook.
+        
+        Args:
+            book_id (str): ID du livre à récupérer
+            
+        Returns:
+            dict: Données du livre ou None si non trouvé
+        """
+        try:
+            book_data = self.books_collection.find_one({"_id": ObjectId(book_id)})
+            if book_data:
+                book_data["_id"] = str(book_data["_id"])
+                return DBBook.from_dict(book_data).to_dict()
+            return None
+        except Exception as e:
+            logging.error(f"Erreur lors de la récupération du livre par ID : {e}")
+            return None
 
     def get_all_books(self, current_user):
         """
@@ -99,7 +119,7 @@ class BookService:
                 cursor = self.books_collection.find({
                     "$or": [
                         {"proprietary": current_user['username']},
-                        {"proprietary": "public"}
+                        {"public": True}  # Utiliser le champ public au lieu de proprietary
                     ]
                 })
             else:

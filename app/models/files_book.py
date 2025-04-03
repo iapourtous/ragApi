@@ -1,3 +1,12 @@
+"""
+Module de modèle de données pour les fichiers de livres traités dans l'application RAG API.
+
+Ce module définit la classe FilesBook qui représente les données enrichies d'un livre
+après son traitement. Il gère le stockage des contenus textuels, des descriptions, des
+embeddings vectoriels et des métadonnées associées, permettant leur utilisation efficace
+dans le pipeline de recherche et d'analyse.
+"""
+
 class FilesBook:
     """
     Modèle représentant les données volumineuses d'un livre, incluant les vecteurs, textes et descriptions.

@@ -1,5 +1,15 @@
+"""
+Module de service pour la gestion des utilisateurs dans l'application RAG API.
+
+Ce module implémente la couche de service qui permet d'interagir avec la collection
+d'utilisateurs dans la base de données MongoDB. Il fournit des fonctionnalités pour
+la création, la recherche, la mise à jour et la suppression d'utilisateurs, ainsi
+que pour l'initialisation d'un compte administrateur par défaut au démarrage de
+l'application.
+"""
 from ..mongoClient import Client
 from ..models.user import User
+from ..dto.user_dto import UserCreateDTO, UserUpdateDTO, UserResponseDTO
 from werkzeug.security import generate_password_hash
 import logging
 
@@ -80,18 +90,21 @@ class UserService:
             metadata (dict, optional): Métadonnées supplémentaires. Defaults to None.
             
         Returns:
-            tuple: (success: bool, message: str)
+            tuple: (success: bool, message: str, user_id: str)
                 - success: True si la création est réussie, False sinon
                 - message: Message décrivant le résultat de l'opération
+                - user_id: ID de l'utilisateur créé ou None si échec
         """
         if self.get_user_by_username(username):
-            return False, "Username already exists"
+            return False, "Username already exists", None
         if self.get_user_by_email(email):
-            return False, "Email already exists"
+            return False, "Email already exists", None
 
         new_user = User(username, password, email, role, metadata)
-        self.users_collection.insert_one(new_user.to_dict())
-        return True, "User created successfully"
+        user_dict = new_user.to_dict()
+        result = self.users_collection.insert_one(user_dict)
+        user_id = str(result.inserted_id)
+        return True, "User created successfully", user_id
 
     def update_user(self, username, updates):
         """
@@ -124,3 +137,63 @@ class UserService:
         """
         result = self.users_collection.delete_one({"username": username})
         return result.deleted_count > 0
+        
+    def get_user_response_dto(self, user_or_id):
+        """
+        Récupère un utilisateur et le convertit en DTO de réponse.
+        
+        Args:
+            user_or_id: L'utilisateur (User) ou son ID (str)
+            
+        Returns:
+            UserResponseDTO: Le DTO de réponse pour l'utilisateur ou None si non trouvé
+        """
+        user = None
+        if isinstance(user_or_id, User):
+            user = user_or_id
+        elif isinstance(user_or_id, str):
+            user_doc = self.users_collection.find_one({"_id": user_or_id})
+            if user_doc:
+                user = User.create_from_db_document(user_doc)
+                
+        if user:
+            return UserResponseDTO(
+                id=str(user.id),
+                username=user.username,
+                email=user.email,
+                role=user.role,
+                created_at=user.created_at,
+                updated_at=user.updated_at
+            )
+        return None
+        
+    def create_user_from_dto(self, user_dto):
+        """
+        Crée un utilisateur à partir d'un DTO.
+        
+        Args:
+            user_dto (UserCreateDTO): DTO contenant les informations de l'utilisateur
+            
+        Returns:
+            tuple: (success: bool, message: str, user_id: str)
+        """
+        return self.create_user(
+            username=user_dto.username,
+            password=user_dto.password,
+            email=user_dto.email,
+            role=user_dto.role
+        )
+        
+    def update_user_from_dto(self, username, user_dto):
+        """
+        Met à jour un utilisateur à partir d'un DTO.
+        
+        Args:
+            username (str): Nom d'utilisateur de l'utilisateur à mettre à jour
+            user_dto (UserUpdateDTO): DTO contenant les informations à mettre à jour
+            
+        Returns:
+            bool: True si la mise à jour est réussie, False sinon
+        """
+        updates = user_dto.to_dict()
+        return self.update_user(username, updates)

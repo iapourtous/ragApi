@@ -1,3 +1,10 @@
+"""
+Module de gestion des services pour l'application RAG API.
+
+Ce module implémente le pattern Singleton pour fournir une instance unique
+des différents services de l'application. Il centralise l'initialisation et
+l'accès aux services de gestion des livres, utilisateurs, blogs et requêtes.
+"""
 from app.services.blog_service import BlogService
 from app.services.queryData_service import QueryDataService
 from app.services.book_service import BookService

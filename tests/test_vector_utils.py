@@ -1,11 +1,43 @@
 import unittest
 import torch
+import numpy as np
 from app.utils.vector_utils import (
     calculate_similarity,
     deserialize_tensor,
     serialize_tensor,
     get_top_scores,
+    vectorize_text,
 )
+from app.utils.cache_utils import vector_cache
+
+# Création d'une classe mock pour le modèle d'encodage
+class MockModel:
+    def encode(self, text, convert_to_tensor=True, normalize_embeddings=True):
+        # Simuler l'encodage en générant un vecteur basé sur la longueur du texte
+        # C'est seulement pour les tests, ne fera pas d'inférence réelle
+        vec_length = 384  # Dimension typique pour les modèles sentence-transformers
+        # Utiliser la longueur du texte comme seed pour reproducibilité
+        seed = sum(ord(c) for c in text)
+        np.random.seed(seed)
+        # Générer un vecteur aléatoire mais déterministe
+        embedding = np.random.randn(vec_length).astype(np.float32)
+        # Normalisation optionnelle
+        if normalize_embeddings:
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+        # Conversion en tensor si demandé
+        if convert_to_tensor:
+            return torch.tensor(embedding)
+        return embedding
+    
+    # Simuler un tokenizer pour split_text_into_chunks
+    def __init__(self):
+        self.tokenizer = self
+    
+    def tokenize(self, text):
+        # Simuler la tokenisation en comptant les mots
+        return text.split()
 
 class TestVectorUtils(unittest.TestCase):
     def setUp(self):
@@ -83,6 +115,85 @@ class TestVectorUtils(unittest.TestCase):
         # Test avec n plus grand que le nombre de scores disponibles
         all_scores = get_top_scores(test_scores, n=10, threshold=0.0)
         self.assertEqual(len(all_scores), 5)
+
+    def test_vectorization_cache(self):
+        """Test le cache de vectorisation"""
+        # Création d'un modèle mock
+        model = MockModel()
+        
+        # Nettoyer le cache pour éviter les interférences
+        vector_cache.lru_cache.clear()
+        
+        # Premier appel, devrait créer un vecteur
+        test_text = "This is a test for vectorization."
+        embedding1 = vectorize_text(test_text, model, prefix="query: ", use_cache=True, chunk_content=False)
+        
+        # Vérifier que l'embedding a été calculé
+        # Si chunk_content=False, on doit obtenir un tenseur
+        # Si chunk_content=True, on obtient une liste de tenseurs
+        if isinstance(embedding1, list):
+            self.assertTrue(len(embedding1) > 0)
+            self.assertIsInstance(embedding1[0], torch.Tensor)
+        else:
+            self.assertIsInstance(embedding1, torch.Tensor)
+        
+        # Vérifier les statistiques du cache (1 miss, 0 hit)
+        stats = vector_cache.get_stats()
+        self.assertEqual(stats["misses"], 1)
+        self.assertEqual(stats["hits"], 0)
+        
+        # Deuxième appel, devrait utiliser le cache
+        embedding2 = vectorize_text(test_text, model, prefix="query: ", use_cache=True, chunk_content=False)
+        
+        # Vérifier que l'embedding est identique
+        if isinstance(embedding1, list):
+            self.assertEqual(len(embedding1), len(embedding2))
+            for e1, e2 in zip(embedding1, embedding2):
+                self.assertTrue(torch.all(torch.eq(e1, e2)))
+        else:
+            self.assertTrue(torch.all(torch.eq(embedding1, embedding2)))
+        
+        # Vérifier les statistiques du cache (1 miss, 1 hit)
+        stats = vector_cache.get_stats()
+        self.assertEqual(stats["misses"], 1)
+        self.assertEqual(stats["hits"], 1)
+        
+        # Test avec un texte différent
+        new_text = "This is another test."
+        embedding3 = vectorize_text(new_text, model, prefix="query: ", use_cache=True, chunk_content=False)
+        
+        # Vérifier que l'embedding est différent du premier
+        if isinstance(embedding1, list) and isinstance(embedding3, list):
+            if len(embedding1) == len(embedding3):
+                # Vérifier qu'au moins un tenseur est différent
+                any_different = False
+                for e1, e3 in zip(embedding1, embedding3):
+                    if not torch.all(torch.eq(e1, e3)):
+                        any_different = True
+                        break
+                self.assertTrue(any_different)
+            else:
+                # Différentes longueurs = différents embeddings
+                pass
+        elif not isinstance(embedding1, list) and not isinstance(embedding3, list):
+            self.assertFalse(torch.all(torch.eq(embedding1, embedding3)))
+        else:
+            # Un est liste, l'autre pas = différents types d'embeddings
+            pass
+        
+        # Vérifier les statistiques du cache (2 misses, 1 hit)
+        stats = vector_cache.get_stats()
+        self.assertEqual(stats["misses"], 2)
+        self.assertEqual(stats["hits"], 1)
+        
+        # Test avec désactivation du cache
+        # Ce devrait être un nouveau calcul malgré la présence en cache
+        embedding4 = vectorize_text(test_text, model, prefix="query: ", use_cache=False, chunk_content=False)
+        
+        # Vérifier les statistiques du cache (inchangées, car cache non utilisé)
+        stats = vector_cache.get_stats()
+        self.assertEqual(stats["misses"], 2)
+        self.assertEqual(stats["hits"], 1)
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,3 +1,11 @@
+"""
+Interface client pour MongoDB utilisée par l'application RAG API.
+
+Ce module fournit une classe Client qui encapsule la connexion à MongoDB
+et simplifie l'accès aux collections. Il s'agit d'une abstraction légère 
+au-dessus de pymongo.MongoClient pour faciliter la gestion des connexions 
+dans l'application.
+"""
 from pymongo import MongoClient
 
 class Client:

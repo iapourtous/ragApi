@@ -1,7 +1,69 @@
+"""
+Module d'utilitaires pour les opérations sur les vecteurs dans l'application RAG API.
+
+Ce module fournit des fonctions pour la manipulation, la sérialisation et la comparaison
+de vecteurs d'embeddings. Il inclut des utilitaires pour calculer les similitudes cosinus,
+vectoriser des pages de documents, sérialiser et désérialiser des tenseurs PyTorch, et
+comparer des requêtes textuelles à des descriptions vectorisées. Ces fonctions sont
+essentielles pour le cœur de fonctionnalité RAG (Retrieval Augmented Generation) de
+l'application.
+"""
 from .text_utils import contain_key, search_upper_words, split_text_into_chunks
 import torch
 from sentence_transformers import util
 import numpy as np
+import logging
+from .cache_utils import vector_cache
+
+def vectorize_text(text, model, prefix="", chunk_content=True, use_cache=True, device=None):
+    """
+    Fonction de base pour vectoriser du texte avec mise en cache.
+    
+    Convertit un texte en vecteur d'embedding en utilisant le modèle spécifié.
+    Si chunk_content est True, le texte est divisé en chunks avant vectorisation.
+    Utilise un cache pour éviter de recalculer les embeddings des textes déjà traités.
+    
+    :param text: Texte à vectoriser
+    :param model: Modèle d'embedding à utiliser
+    :param prefix: Préfixe optionnel à ajouter au texte (ex: "query: ", "passage: ")
+    :param chunk_content: Si True, diviser le texte en chunks avant de vectoriser
+    :param use_cache: Si True, utilise le cache de vectorisation
+    :param device: Device sur lequel placer le tenseur résultant (None = laisser sur le device par défaut)
+    :return: Tenseur ou liste de tenseurs selon chunk_content
+    """
+    # Vérifier si le résultat est déjà dans le cache
+    if use_cache:
+        cached_result = vector_cache.get(text, prefix, chunk_content, device)
+        if cached_result is not None:
+            return cached_result
+    
+    # Si pas dans le cache, procéder à la vectorisation
+    if chunk_content:
+        # Division du texte en chunks respectant la limite de tokens
+        chunked_text = split_text_into_chunks(text, model)
+        # Encodage de chaque chunk en vecteurs
+        embeddings = [model.encode(prefix + chunk, convert_to_tensor=True, normalize_embeddings=True) 
+                     for chunk in chunked_text]
+        
+        # Mettre en cache chaque chunk si nécessaire
+        if use_cache:
+            for i, chunk in enumerate(chunked_text):
+                vector_cache.put(chunk, embeddings[i], prefix, False)
+                
+        return embeddings
+    else:
+        # Encodage du texte complet
+        embedding = model.encode(prefix + text, convert_to_tensor=True, normalize_embeddings=True)
+        
+        # Mettre en cache le résultat si nécessaire
+        if use_cache:
+            vector_cache.put(text, embedding, prefix, chunk_content)
+            
+        # Déplacer sur le device demandé si nécessaire
+        if device is not None:
+            embedding = embedding.to(device)
+            
+        return embedding
 
 def calculate_similarity(data, vector_to_compare, device):
     """
@@ -103,10 +165,8 @@ def vectorize_pages(doc, begin, end, model):
     for page in doc[begin-1:end]:
         # Extraction du texte de la page
         text = page.get_text()
-        # Division du texte en chunks respectant la limite de tokens
-        chunked_text = split_text_into_chunks(text, model)
-        # Encodage de chaque chunk en vecteurs
-        embeddings = [model.encode(chunk, convert_to_tensor=True, normalize_embeddings=True) for chunk in chunked_text]
+        # Utilisation de la fonction commune de vectorisation avec cache
+        embeddings = vectorize_text(text, model, prefix="passage: ", chunk_content=True)
         pages.append({
             "pageNumber": page.number,
             "text": text,
@@ -157,8 +217,8 @@ def compare_query_to_descriptions(query, descriptions, descriptions_vectorized, 
                 
     flat_vectors = [deserialize_tensor(vec, device) for level in descriptions_vectorized for vec in level]
 
-    # Vectoriser la requête
-    query_embedding = model.encode(query, convert_to_tensor=True, normalize_embeddings=True).to(device)
+    # Vectoriser la requête en utilisant notre fonction commune (avec cache)
+    query_embedding = vectorize_text(query, model, prefix="query: ", chunk_content=False, device=device)
 
     if uppercase_words:
         # Créer une liste booléenne indiquant si chaque description contient un mot en majuscule
@@ -219,3 +279,11 @@ def compare_query_to_descriptions(query, descriptions, descriptions_vectorized, 
                     idx += 1
 
     return normalized_similarities
+
+def get_cache_stats():
+    """
+    Récupère les statistiques du cache de vectorisation.
+    
+    :return: Statistiques du cache de vecteurs
+    """
+    return vector_cache.get_stats()

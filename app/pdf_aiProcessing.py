@@ -1,10 +1,13 @@
-from itertools import accumulate
-import logging
-from os import access
-from re import sub
-import time
+"""
+Module de traitement des requêtes RAG sur documents PDF pour l'application.
 
-from .utils.ai_utils import clarify_question
+Ce module implémente le pipeline complet de traitement des requêtes utilisant 
+la technique RAG (Retrieval Augmented Generation). Il gère l'analyse des questions, 
+l'extraction des passages pertinents, le filtrage par pertinence, et la génération 
+des réponses basées sur les contenus extraits des documents PDF.
+"""
+import logging
+import time
 
 from .utils.pdfQuery_utils import (
     extract_keywords,
@@ -121,7 +124,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
             }
         }
 
-        response_data = save_response_to_db(query_service, query, vector_to_compare, response_data, send_progress)
+        response_data = save_response_to_db(query_service, finalquery, vector_to_compare, response_data, send_progress)
 
         execution_time = time.time() - start_time
         logging.info("=" * 50)

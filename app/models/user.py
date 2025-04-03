@@ -1,3 +1,11 @@
+"""
+Module de gestion des utilisateurs pour l'application RAG API.
+
+Ce module définit le modèle de données pour les utilisateurs de l'application.
+Il gère l'authentification, l'autorisation et les métadonnées des utilisateurs,
+implémentant le hachage sécurisé des mots de passe et des méthodes pour convertir
+entre les objets utilisateurs et leur représentation pour le stockage en base de données.
+"""
 from werkzeug.security import generate_password_hash, check_password_hash
 
 class User:
@@ -15,7 +23,7 @@ class User:
         metadata (dict): Métadonnées additionnelles de l'utilisateur
     """
 
-    def __init__(self, username, password, email, role="user", metadata=None):
+    def __init__(self, username, password, email, role="user", metadata=None, _id=None):
         """
         Initialise un nouvel utilisateur.
 
@@ -25,12 +33,14 @@ class User:
             email (str): Adresse email de l'utilisateur
             role (str, optional): Rôle de l'utilisateur. Defaults to "user".
             metadata (dict, optional): Métadonnées additionnelles. Defaults to None.
+            _id (str, optional): Identifiant unique de l'utilisateur. Defaults to None.
         """
         self.username = username
         self.email = email
         self.password_hash = generate_password_hash(password)
         self.role = role
         self.metadata = metadata or {}
+        self.id = _id  # Ajout de l'attribut id
 
     def check_password(self, password):
         """
@@ -52,13 +62,14 @@ class User:
         Args:
             doc (dict): Document contenant les données de l'utilisateur
                 Doit contenir au minimum: username, email, password_hash
-                Peut contenir: role, metadata
+                Peut contenir: role, metadata, _id
 
         Returns:
             User: Instance d'utilisateur créée à partir du document
 
         Example:
             >>> doc = {
+            ...     '_id': '123456789',
             ...     'username': 'john_doe',
             ...     'email': 'john@example.com',
             ...     'password_hash': 'hashed_password',
@@ -71,6 +82,7 @@ class User:
         user.password_hash = doc['password_hash']
         user.role = doc.get('role', 'user')
         user.metadata = doc.get('metadata', {})
+        user.id = str(doc.get('_id', ''))  # Conversion de l'ID MongoDB en chaîne
         return user
 
     def to_dict(self):
@@ -90,10 +102,16 @@ class User:
             >>> print(user_dict['username'])
             'john_doe'
         """
-        return {
+        user_dict = {
             'username': self.username,
             'email': self.email,
             'password_hash': self.password_hash,
             'role': self.role,
             'metadata': self.metadata
         }
+        
+        # Inclure l'ID s'il existe
+        if hasattr(self, 'id') and self.id:
+            user_dict['_id'] = self.id
+            
+        return user_dict

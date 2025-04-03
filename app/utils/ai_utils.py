@@ -1,17 +1,28 @@
 import logging
 
 from .file_utils import save_partial_data
-from .text_utils import split_text_into_chunks
-from .vector_utils import serialize_tensor
+from .vector_utils import serialize_tensor, vectorize_text
 from flask import current_app, json
 from app.models.ai_model import AIModel
+from .model_utils import get_api_key_for_model
 
-ai_model = AIModel()
-
-def filter_matches_by_llm_batch(passages_batch, query, api_key, model_type):
+def filter_matches_by_llm_batch(passages_batch, query, api_key=None, model_type=None):
     """
     Évalue un lot de passages simultanément via LLM.
+    
+    Args:
+        passages_batch: Liste des passages à évaluer
+        query: Question utilisateur
+        api_key: Clé API pour le modèle
+        model_type: Type de modèle à utiliser
     """
+    # Utiliser les valeurs par défaut du contexte Flask si disponibles
+    if api_key is None:
+        api_key = get_api_key_for_model(model_type)
+    
+    if model_type is None and current_app:
+        model_type = current_app.config.get('AI_MODEL_TYPE', 'vllm_openai')
+        
     passages_text = "\n\n".join([
         f"PASSAGE {i+1} (Page {match['page_num']}):\n{match['text']}"
         for i, match in enumerate(passages_batch)
@@ -34,7 +45,7 @@ etc.
 RÉPONSES:"""
 
     try:
-        response = ai_model.generate_response(model_type, api_key, prompt)
+        response = AIModel.generate_response(model_type, api_key, prompt)
         
         # Analyse des réponses
         results = []
@@ -124,7 +135,7 @@ INSTRUCTIONS :
 QUESTION CLARIFIÉE :"""
 
     try:
-        clarified = ai_model.generate_response(model_type, api_key, prompt)
+        clarified = AIModel.generate_response(model_type, api_key, prompt)
         logging.info(f"Question clarifiée: {clarified}")
         return clarified.strip()
     except Exception as e:
@@ -140,7 +151,10 @@ def reduceTextForDescriptions(text, context, length=100):
     :param length: Nombre de mots cible pour la description.
     :return: Description générée par le modèle d'IA.
     """
-    api_key = current_app.config['API_KEY']
+    # Utiliser la fonction centralisée de récupération de clés API
+    model_type = current_app.config['AI_MODEL_TYPE']
+    api_key = get_api_key_for_model(model_type)
+    
     prompt = f"""
 Rédigez une description concise d'un livre en combinant le résumé suivant et les informations contextuelles fournies. La description doit être d'environ {length} mots, informative et objective.
 
@@ -152,7 +166,7 @@ Rédigez une description concise d'un livre en combinant le résumé suivant et 
 
 **Description** :
 """
-    response = ai_model.generate_response(current_app.config['AI_MODEL_TYPE'], api_key, prompt)
+    response = AIModel.generate_response(model_type, api_key, prompt)
     return response
 
 def generate_ai_response(query, documentation, additional_instructions="", api_key=None, model_type=None):
@@ -189,24 +203,24 @@ FORMAT DE RÉPONSE REQUIS (respectez strictement ce format) :
 
     try:
         # Analyse de la question et des documents
-        structure_analysis = ai_model.generate_response(
+        structure_analysis = AIModel.generate_response(
             model_type,
             api_key,
             analysis_prompt,
             system="Vous êtes un expert en analyse documentaire et structuration de réponses."
         )
         
-        # Extraire le JSON de la réponse
+        # Extraction du JSON de la réponse
         json_str = structure_analysis
         if "```json" in json_str:
             json_str = json_str.split("```json")[1].split("```")[0]
         elif "```" in json_str:
             json_str = json_str.split("```")[1].split("```")[0]
         
-        # Nettoyer le JSON
+        # Nettoyage du JSON
         json_str = json_str.strip()
         
-        # Parser l'analyse JSON
+        # Parsing de l'analyse JSON
         try:
             analysis = json.loads(json_str)
         except json.JSONDecodeError as e:
@@ -226,8 +240,13 @@ FORMAT DE RÉPONSE REQUIS (respectez strictement ce format) :
         if not all(key in analysis for key in ["question_type", "document_types", "recommended_structure"]):
             raise ValueError("Structure JSON invalide")
 
-        # Génération des instructions de structure spécifiques
-        structure_instructions = "\n".join([f"# {section}" for section in analysis["recommended_structure"]])
+        # Génération des instructions de structure spécifiques en utilisant generate_structure_instructions
+        structure_instructions = generate_structure_instructions(
+            analysis["question_type"],
+            analysis["document_types"],
+            analysis["recommended_structure"],
+            additional_instructions
+        )
 
         # Prompt principal pour la génération de la réponse
         main_prompt = f"""En tant qu'expert en analyse documentaire, générez une réponse structurée à la question suivante.
@@ -259,7 +278,7 @@ DIRECTIVES GÉNÉRALES :
 RÉPONSE :"""
 
         # Génération de la réponse finale
-        response = ai_model.generate_response(
+        response = AIModel.generate_response(
             model_type,
             api_key,
             main_prompt,
@@ -295,107 +314,120 @@ def generate_error_response(error_message):
 
 def generate_structure_instructions(question_type, document_types, recommended_structure, additional_instructions):
     """
-    Génère des instructions de structure spécifiques selon le contexte.
+    Génère des instructions de structure spécifiques selon le contexte en s'appuyant sur des formats académiques et professionnels.
     """
     structure_templates = {
         "comparative": """
-# Synthèse comparative
-- Points clés de comparaison
-- Analyse des similitudes
-- Analyse des différences
+# Introduction
+- Présentation du contexte et des objectifs de la comparaison.
 
-# Analyse détaillée
-- Critères de comparaison
-- Évaluation point par point
-- Tableau comparatif
+# Méthodologie Comparative
+- Critères et méthodes d'analyse comparée.
+
+# Analyse Comparative
+- Examen détaillé des similitudes et des différences.
+
+# Discussion
+- Interprétation critique des résultats comparatifs.
 
 # Conclusion
-- Synthèse des différences principales
-- Recommandations
+- Résumé des constatations et recommandations.
 
-# Sources et références
-# Limites de la comparaison""",
-
+# Références
+""",
         "explicative": """
-# Résumé
-- Contexte
-- Points clés
+# Introduction
+- Contexte et présentation du sujet.
 
-# Explication détaillée
-- Concepts principaux
-- Mécanismes
-- Exemples
+# Cadre Théorique
+- Concepts, définitions et références théoriques.
 
-# Implications
-# Sources
-# Pour aller plus loin""",
+# Analyse Explicative
+- Développement détaillé des explications avec exemples.
 
-        "analytique": """
-# Synthèse analytique
-- Contexte
-- Problématique principale
+# Discussion
+- Implications, limites et perspectives.
 
-# Analyse approfondie
-- Facteurs clés
-- Interactions
-- Impacts
-
-# Interprétation
-# Recommandations
-# Sources
-# Limites de l'analyse""",
-
-        "factuelle": """
-# Réponse directe
-# Contexte
-# Détails supplémentaires
-# Sources
-# Informations connexes""",
-
-        "general": """
-# Synthèse globale
-# Analyse détaillée
 # Conclusion
-# Sources utilisées
-# Autres recherches associées
-# Limites de l'analyse"""
+- Synthèse et recommandations.
+
+# Références
+""",
+        "analytique": """
+# Introduction
+- Contexte, problématique et objectifs de l'analyse.
+
+# Méthodologie
+- Description des approches analytiques et outils utilisés.
+
+# Analyse Approfondie
+- Examen détaillé des données et des résultats.
+
+# Discussion
+- Interprétation critique et implications des analyses.
+
+# Conclusion
+- Résumé des analyses et recommandations.
+
+# Références
+""",
+        "factuelle": """
+# Introduction
+- Contexte et objectifs de l'exposé factuel.
+
+# Exposé des Faits
+- Présentation chronologique et objective des faits.
+
+# Analyse Contextuelle
+- Mise en perspective et explication des faits.
+
+# Conclusion
+- Synthèse des faits et conclusions tirées.
+
+# Références
+""",
+        "general": """
+# Introduction
+- Contexte général et définition de la problématique.
+
+# Analyse et Synthèse
+- Présentation détaillée des informations et analyse critique.
+
+# Discussion
+- Réflexions, implications et interprétations.
+
+# Conclusion
+- Résumé global et recommandations.
+
+# Références
+"""
     }
 
-    # Sélection du template de base
+    # Sélection du template de base selon le type de question
     base_structure = structure_templates.get(question_type.lower(), structure_templates["general"])
 
     # Adaptation selon le type de document
     if "technical" in document_types:
-        base_structure += "\n# Spécifications techniques"
+        base_structure += """
+# Annexes Techniques
+- Spécifications, schémas et données techniques."""
     if "legal" in document_types:
-        base_structure += "\n# Implications légales"
+        base_structure += """
+# Cadre Légal
+- Analyse des implications juridiques et réglementaires."""
     if "historical" in document_types:
-        base_structure += "\n# Contexte historique"
+        base_structure += """
+# Contexte Historique
+- Présentation du cadre temporel et analyse historique."""
 
-    # Intégration des sections recommandées
+    # Intégration des sections recommandées en évitant les répétitions
+    # Les sections "Limites de l'analyse" et "Autres recherches associées" sont laissées à add_additional_sections
     for section in recommended_structure:
-        if section not in base_structure:
-            base_structure += f"\n# {section}"
+        section_norm = section.strip().lower()
+        if section_norm not in base_structure.lower() and section_norm not in ["limites de l'analyse", "autres recherches associées"]:
+            base_structure += f"\n# {section.strip()}"
 
     return base_structure
-
-def generate_error_response(error_message):
-    """
-    Génère une réponse formatée en cas d'erreur.
-    """
-    return f"""# Erreur de Génération
-
-## Problème Rencontré
-{error_message}
-
-## Actions Suggérées
-1. Veuillez réessayer votre requête
-2. Considérez reformuler votre question
-3. Vérifiez si la documentation fournie contient les informations nécessaires
-
-## État du Système
-- Une erreur s'est produite lors du traitement
-- Les données peuvent être incomplètes ou incorrectes"""
     
 def generate_combined_documentation(documents):
     documentation = """<?xml version="1.0" encoding="UTF-8"?>
@@ -480,7 +512,8 @@ def generate_overall_description(textes, model, existing_description=None, exist
             }
             page_descriptions.append(page_info)
 
-            embedding = model.encode(page['text'], convert_to_tensor=True, normalize_embeddings=True)
+            # Utiliser la fonction commune pour la vectorisation
+            embedding = vectorize_text(page['text'], model, chunk_content=False)
             page_vectors.append(serialize_tensor(embedding))
 
         general_description.append(page_descriptions)
@@ -623,14 +656,17 @@ Instructions :
 RÉSUMÉ :"""
 
     # Générer le résumé en utilisant le modèle d'IA
-    description = ai_model.generate_response(
-        current_app.config['AI_MODEL_TYPE'],
-        current_app.config['API_KEY'],
+    model_type = current_app.config['AI_MODEL_TYPE']
+    api_key = get_api_key_for_model(model_type)
+        
+    description = AIModel.generate_response(
+        model_type,
+        api_key,
         prompt
     )
 
-    # Générer l'embedding du résumé pour la vectorisation
-    embedding = model.encode(description, convert_to_tensor=True, normalize_embeddings=True)
+    # Générer l'embedding du résumé en utilisant la fonction commune
+    embedding = vectorize_text(description, model, chunk_content=False)
     # Enregistrer le résumé généré dans les logs pour suivi
     logging.info(description)
     return description, embedding
@@ -679,9 +715,16 @@ INSTRUCTIONS :
 RÉPONSE FUSIONNÉE :"""
 
         try:
-            merged = ai_model.generate_response(
-                app['config']['AI_MODEL_TYPE_FOR_REPONSE'],
-                api_key,
+            model_type = app['config']['AI_MODEL_TYPE_FOR_REPONSE']
+            model_api_key = get_api_key_for_model(model_type, app['config'])
+            
+            # Si aucune clé n'est trouvée, utiliser celle fournie en argument
+            if model_api_key is None:
+                model_api_key = api_key
+                
+            merged = AIModel.generate_response(
+                model_type,
+                model_api_key,
                 batch_prompt
             )
             if send_progress:
@@ -825,9 +868,12 @@ INSTRUCTIONS POUR LA VERSION FINALE :
 RÉPONSE COMPLÈTE :"""
 
     try:
-        enhanced_response = ai_model.generate_response(
-            app['config']['AI_MODEL_TYPE_FOR_REPONSE'],
-            app['config']['API_KEY'],
+        model_type = app['config']['AI_MODEL_TYPE_FOR_REPONSE']
+        model_api_key = get_api_key_for_model(model_type, app['config'])
+            
+        enhanced_response = AIModel.generate_response(
+            model_type,
+            model_api_key,
             prompt
         )
         return enhanced_response
@@ -885,7 +931,7 @@ Instructions:
     try:
         corrected_text = AIModel.generate_response(
             app.config['AI_MODEL_TYPE'],
-            app.config['API_KEY'],
+            get_api_key_for_model(app.config['AI_MODEL_TYPE'], app.config),
             prompt
         )
         logging.info(correct_ocr_text)
