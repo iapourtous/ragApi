@@ -14,7 +14,6 @@ import logging
 import os
 from threading import Thread
 from queue import Queue
-from app.utils.auth_utils import token_required
 from app.utils.images_utils import convert_pdf_page_to_image
 from app.utils.vector_utils import compare_query_to_descriptions, serialize_tensor
 from app.utils.file_utils import load_processed_data, save_processed_data
@@ -124,8 +123,7 @@ def serve_pdf(subpath, filename):
     abort(404)
 
 @pdf_bp.route('/title/<title>/descriptions', methods=['GET'])
-@token_required
-def get_descriptions_by_title(current_user, title):
+def get_descriptions_by_title(title):
     """
     Récupère les descriptions d'un livre par son titre.
     
@@ -161,8 +159,7 @@ def get_descriptions_by_title(current_user, title):
         return jsonify({"error": str(e)}), 500
 
 @pdf_bp.route('/title/<title>/similarity', methods=['POST'])
-@token_required
-def get_similarity_by_title(current_user, title):
+def get_similarity_by_title(title):
     """
     Calcule la similarité entre une requête et les descriptions d'un livre.
     
@@ -227,8 +224,7 @@ def get_similarity_by_title(current_user, title):
         return jsonify({"error": str(e)}), 500
 
 @pdf_bp.route('/generate-preview', methods=['POST'])
-@token_required
-def generate_pdf_preview(current_user):
+def generate_pdf_preview():
     """
     Génère une prévisualisation d'une page de PDF.
     
@@ -273,8 +269,7 @@ def generate_pdf_preview(current_user):
         return jsonify({"error": str(e)}), 500
 
 @pdf_bp.route('/batch-process', methods=['POST'])
-@token_required
-def batch_process_pdfs(current_user):
+def batch_process_pdfs():
     """
     Lance le traitement par lot de plusieurs PDFs.
     
@@ -286,8 +281,6 @@ def batch_process_pdfs(current_user):
         403: Si l'utilisateur n'est pas administrateur
         400: Si les paramètres sont invalides
     """
-    if current_user['role'] != 'admin':
-        return jsonify({'message': 'Admin privileges required'}), 403
 
     try:
         data = request.json
@@ -328,8 +321,7 @@ def batch_process_pdfs(current_user):
         return jsonify({"error": str(e)}), 500
     
 @pdf_bp.route("/pdfai", methods=["POST"])
-@token_required
-def pdfai_post(current_user):
+def pdfai_post():
     """
     Traite une requête d'analyse de documents PDF.
     
@@ -355,7 +347,7 @@ def pdfai_post(current_user):
         if not isinstance(files, list):
             return jsonify({"error": "Files should be a list"}), 400
 
-        response_data = process_query(current_app, query, files, new_generate, additional_instructions, max_page)
+        response_data = process_query(extract_config(current_app), query, files, new_generate, additional_instructions, max_page)
         return response_data
 
     except Exception as e:
@@ -363,8 +355,7 @@ def pdfai_post(current_user):
         return {"error": str(e)}, 500
     
 @pdf_bp.route('/', methods=['POST'])
-@token_required
-def create_book_route(current_user):
+def create_book_route():
     """
     Crée un nouveau livre dans la base de données.
     
@@ -377,11 +368,9 @@ def create_book_route(current_user):
         403: Si l'utilisateur n'est pas administrateur
         500: En cas d'erreur serveur
     """
-    if current_user['role'] != 'admin':
-        return jsonify({'message': 'Admin privileges required'}), 403
     try:
         data = request.form.to_dict()
-        data['proprietary'] = current_user['username']
+        data['proprietary'] = 'system'
 
         logging.info(f"Données reçues pour la création du livre : {data}")
 

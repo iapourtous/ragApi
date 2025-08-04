@@ -1,0 +1,15 @@
+# Dépendances pour l'utilitaire graphique Book Manager GUI
+# Ces dépendances s'ajoutent aux requirements.txt existants
+
+# Interface graphique
+# tkinter est inclus avec Python par défaut
+
+# Traitement d'images
+Pillow>=10.0.0
+
+# Communication HTTP
+requests>=2.28.0
+
+# Note: Les autres dépendances sont déjà dans requirements.txt
+# Pour installer uniquement les nouvelles dépendances GUI :
+# pip install Pillow requests

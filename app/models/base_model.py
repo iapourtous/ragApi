@@ -83,7 +83,7 @@ class BaseLLMModel(ABC):
                          query: str, 
                          system: Optional[str] = None, 
                          temperature: float = 0.7, 
-                         max_tokens: int = 1000,
+                         max_tokens: int = 16384,
                          stream: bool = False,
                          **kwargs) -> Dict[str, Any]:
         """

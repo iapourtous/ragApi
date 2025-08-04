@@ -715,7 +715,7 @@ INSTRUCTIONS :
 RÉPONSE FUSIONNÉE :"""
 
         try:
-            model_type = app['config']['AI_MODEL_TYPE_FOR_REPONSE']
+            model_type = app['config']['AI_MODEL_TYPE_FOR_RESPONSE']
             model_api_key = get_api_key_for_model(model_type, app['config'])
             
             # Si aucune clé n'est trouvée, utiliser celle fournie en argument
@@ -868,7 +868,7 @@ INSTRUCTIONS POUR LA VERSION FINALE :
 RÉPONSE COMPLÈTE :"""
 
     try:
-        model_type = app['config']['AI_MODEL_TYPE_FOR_REPONSE']
+        model_type = app['config']['AI_MODEL_TYPE_FOR_RESPONSE']
         model_api_key = get_api_key_for_model(model_type, app['config'])
             
         enhanced_response = AIModel.generate_response(

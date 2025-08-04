@@ -25,7 +25,7 @@ import logging
 import torch
 from sentence_transformers import util
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .text_utils import contain_key, search_upper_words, vectorize_query
+from .text_utils import contain_key, search_upper_words, search_named_entities_smart, vectorize_query
 from .ai_utils import (
     estimate_tokens,
     generate_ai_response,
@@ -35,23 +35,30 @@ from .ai_utils import (
 )
 from .file_utils import load_processed_data
 
-def extract_keywords(query, send_progress):
+def extract_keywords(query, send_progress, use_ner=True):
     """
     Extrait les mots-clés importants d'une requête utilisateur.
     
-    Cette fonction analyse la requête pour en extraire les mots les plus significatifs,
-    qui seront utilisés pour filtrer les documents pertinents.
+    Cette fonction analyse la requête pour en extraire les entités nommées les plus significatives
+    en utilisant la reconnaissance d'entités nommées (NER) ou la méthode traditionnelle basée
+    sur les majuscules comme fallback.
     
     Args:
         query (str): La requête utilisateur à analyser.
         send_progress (callable): Fonction de callback pour signaler la progression.
+        use_ner (bool): Si True, utilise la NER; sinon utilise l'ancienne méthode.
         
     Returns:
-        list: Liste des mots-clés extraits de la requête.
+        list: Liste des mots-clés/entités extraits de la requête.
     """
-    send_progress("Extraction des mots-clés...")
-    most_words = search_upper_words(query)
-    logging.info(f"Extracted keywords: {most_words}")
+    if use_ner:
+        send_progress("Extraction des entités nommées...")
+        most_words = search_named_entities_smart(query, language="fr", use_ner=True)
+    else:
+        send_progress("Extraction des mots-clés...")
+        most_words = search_upper_words(query)
+    
+    logging.info(f"Extracted keywords/entities: {most_words}")
     return most_words
 
 def vectorize_user_query(query, model, send_progress):
@@ -330,7 +337,7 @@ def merge_all_responses(app, partial_responses, query, additional_instructions="
         app, 
         partial_responses, 
         query, 
-        max_tokens=14000, 
+        max_tokens=16384, 
         additional_instructions=additional_instructions,
         send_progress=send_progress,
         add_section=add_section

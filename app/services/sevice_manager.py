@@ -2,13 +2,11 @@
 Module de gestion des services pour l'application RAG API.
 
 Ce module implémente le pattern Singleton pour fournir une instance unique
-des différents services de l'application. Il centralise l'initialisation et
-l'accès aux services de gestion des livres, utilisateurs, blogs et requêtes.
+des services essentiels de l'application. Il centralise l'initialisation et
+l'accès aux services de gestion des livres et requêtes.
 """
-from app.services.blog_service import BlogService
 from app.services.queryData_service import QueryDataService
 from app.services.book_service import BookService
-from app.services.user_service import UserService
 
 
 class ServiceManager:
@@ -17,13 +15,12 @@ class ServiceManager:
     
     Cette classe implémente le pattern Singleton pour assurer une instance unique
     des services à travers l'application. Elle gère l'initialisation et l'accès
-    aux différents services (livre, utilisateur, requête).
+    aux services essentiels (livre, requête).
 
     Attributes:
         _instance (ServiceManager): Instance unique du gestionnaire de services
         config (dict): Configuration de l'application
         book_service (BookService): Service de gestion des livres
-        user_service (UserService): Service de gestion des utilisateurs
         query_service (QueryDataService): Service de gestion des requêtes
     """
 
@@ -56,9 +53,7 @@ class ServiceManager:
         """
         self.config = config or {}
         self.book_service = BookService()
-        self.user_service = UserService()
         self.query_service = QueryDataService()
-        self.blog_service = BlogService()
 
     def cleanup(self):
         """

@@ -21,36 +21,33 @@ def setup_config(app):
     # Clés API des modèles LLM
     app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
     app.config['TOGETHER_API_KEY'] = os.getenv('TOGETHER_API_KEY')
-    app.config['QWEN_API_KEY'] = os.getenv('QWEN_API_KEY')
     app.config['MISTRAL_API_KEY'] = os.getenv('MISTRAL_API_KEY')
+    app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY')
     
     # Rétrocompatibilité
     app.config['API_KEY'] = os.getenv('TOGETHER_API_KEY')
     app.config['MISTRAL_KEY'] = os.getenv('MISTRAL_API_KEY')
 
-    # Clés API pour l'application
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-    app.config['RECAPTCHA_API_KEY'] = os.getenv('RECAPTCHA_API_KEY')
-    app.config['RECAPTCHA_SITE_KEY'] = os.getenv('RECAPTCHA_SITE_KEY')
+    # Configuration de base (SECRET_KEY conservée pour d'autres usages potentiels)
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
 
     # Configuration AI
     app.config['AI_MODEL_TYPE'] = os.getenv('AI_MODEL_TYPE', 'vllm_openai')
-    app.config['AI_MODEL_TYPE_FOR_REPONSE'] = os.getenv('AI_MODEL_TYPE_FOR_REPONSE', 'vllm_openai')
+    app.config['AI_MODEL_TYPE_FOR_RESPONSE'] = os.getenv('AI_MODEL_TYPE_FOR_RESPONSE', 'vllm_openai')
     
     # Configurations spécifiques aux modèles
     # OpenAI
     app.config['OPENAI_MODEL_NAME'] = os.getenv('OPENAI_MODEL_NAME', 'o1-mini')
     
     # Together
-    app.config['TOGETHER_MODEL_NAME'] = os.getenv('TOGETHER_MODEL_NAME', 'Qwen/Qwen2.5-72B-Instruct-Turbo')
+    app.config['TOGETHER_MODEL_NAME'] = os.getenv('TOGETHER_MODEL_NAME', 'meta-llama/Llama-3.1-70B-Instruct-Turbo')
     
-    # Qwen
-    app.config['QWEN_MODEL_NAME'] = os.getenv('QWEN_MODEL_NAME', 'qwen-max')
-    app.config['QWEN_API_BASE'] = os.getenv('QWEN_API_BASE', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1')
+    # Groq
+    app.config['GROQ_MODEL_NAME'] = os.getenv('GROQ_MODEL_NAME', 'moonshotai/kimi-k2-instruct')
     
     # vLLM
     app.config['VLLM_API_BASE'] = os.getenv('VLLM_API_BASE', 'http://localhost:8000/v1')
-    app.config['VLLM_MODEL_NAME'] = os.getenv('VLLM_MODEL_NAME', 'Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4')
+    app.config['VLLM_MODEL_NAME'] = os.getenv('VLLM_MODEL_NAME', 'microsoft/Phi-3-mini-4k-instruct')
 
     # Création des répertoires nécessaires
     if not os.path.exists(app.config['IMAGE_FOLDER']):
@@ -59,16 +56,8 @@ def setup_config(app):
     if not os.path.exists(app.config['PDF_FOLDER']):
         os.makedirs(app.config['PDF_FOLDER'])
 
-    # Validation des configurations requises
-    required_configs = [
-        'SECRET_KEY',
-        'RECAPTCHA_API_KEY',
-        'RECAPTCHA_SITE_KEY'
-    ]
-
-    missing_configs = [config for config in required_configs if not app.config.get(config)]
-    if missing_configs:
-        raise ValueError(f"Configurations manquantes : {', '.join(missing_configs)}")
+    # Validation des configurations requises (SECRET_KEY maintenant optionnel avec valeur par défaut)
+    # Aucune validation critique nécessaire
     
 def extract_config(app):
     """

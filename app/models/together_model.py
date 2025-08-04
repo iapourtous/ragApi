@@ -45,7 +45,7 @@ class TogetherModel(BaseLLMModel):
         """
         try:
             system_prompt = system or self.system_prompt
-            model_name = self.model_name or "Qwen/Qwen2.5-72B-Instruct-Turbo"
+            model_name = self.model_name or "meta-llama/Llama-3.1-70B-Instruct-Turbo"
             
             # Paramètres par défaut
             top_p = kwargs.pop("top_p", 0.7)

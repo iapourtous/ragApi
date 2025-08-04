@@ -7,8 +7,8 @@ des API keys et des configurations.
 """
 from .vllm_openai_model import VLLMOpenAIModel
 from .together_model import TogetherModel
-from .qwen_model import QwenModel
 from .openai_model import OpenAIModel
+from .groq_model import GroqModel
 from flask import current_app
 import logging
 import importlib
@@ -26,7 +26,7 @@ except ImportError:
         key_map = {
             "openai": "OPENAI_API_KEY",
             "together": "TOGETHER_API_KEY",
-            "qwen": "QWEN_API_KEY",
+            "groq": "GROQ_API_KEY",
             "vllm_openai": None
         }
         
@@ -40,7 +40,7 @@ class AIModel:
     Classe factory pour la création et la gestion des différents modèles d'IA.
     
     Cette classe fournit une interface unifiée pour instancier et utiliser différents
-    modèles d'IA (OpenAI, Qwen, Together, VLLM) de manière cohérente.
+    modèles d'IA (OpenAI, Together, Groq, VLLM) de manière cohérente.
     """
     @staticmethod
     def get_model(model_type, api_key=None, **kwargs):
@@ -48,7 +48,7 @@ class AIModel:
         Crée et retourne une instance du modèle d'IA spécifié.
 
         Args:
-            model_type (str): Type de modèle à instancier ('openai', 'qwen', 'together', 'vllm_openai')
+            model_type (str): Type de modèle à instancier ('openai', 'together', 'groq', 'vllm_openai')
             api_key (str, optional): Clé API pour l'authentification au service
             **kwargs: Arguments additionnels spécifiques au modèle
 
@@ -64,8 +64,8 @@ class AIModel:
         """
         model_classes = {
             "openai": OpenAIModel,
-            "qwen": QwenModel,
             "together": TogetherModel,
+            "groq": GroqModel,
             "vllm_openai": VLLMOpenAIModel,
         }
 
@@ -81,8 +81,8 @@ class AIModel:
             if 'model_name' not in kwargs:
                 model_name_map = {
                     "openai": config.get('OPENAI_MODEL_NAME'),
-                    "qwen": config.get('QWEN_MODEL_NAME'),
                     "together": config.get('TOGETHER_MODEL_NAME'),
+                    "groq": config.get('GROQ_MODEL_NAME'),
                     "vllm_openai": config.get('VLLM_MODEL_NAME')
                 }
                 model_name = model_name_map.get(model_type)
@@ -90,9 +90,7 @@ class AIModel:
                     kwargs['model_name'] = model_name
                     
             # Ajouter l'URL de base pour les APIs qui en ont besoin
-            if model_type == "qwen" and 'api_base' not in kwargs:
-                kwargs['api_base'] = config.get('QWEN_API_BASE')
-            elif model_type == "vllm_openai" and 'api_base_url' not in kwargs:
+            if model_type == "vllm_openai" and 'api_base_url' not in kwargs:
                 kwargs['api_base_url'] = config.get('VLLM_API_BASE')
 
         if model_type in model_classes:
@@ -113,7 +111,7 @@ class AIModel:
         pour générer une réponse à la requête fournie.
 
         Args:
-            model_type (str): Type de modèle à utiliser ('openai', 'qwen', 'together', 'vllm_openai')
+            model_type (str): Type de modèle à utiliser ('openai', 'together', 'groq', 'vllm_openai')
             api_key (str): Clé API pour l'authentification au service
             query (str): Requête ou prompt pour le modèle
             system (str, optional): Message système pour contextualiser la requête

@@ -18,7 +18,6 @@ from app.services.book_service import BookService
 from app.utils.file_utils import load_processed_data
 from app.utils.ai_utils import estimate_tokens
 from app.models.ai_model import AIModel
-from app.utils.auth_utils import token_required
 from app.dto.question_dto import QuestionRequestDTO, AnswerResponseDTO, DocumentReferenceDTO
 
 # Création du Blueprint pour la génération de questions
@@ -76,8 +75,7 @@ def retrieve_relevant_passages(files_book, question, top_k=5):
     return relevant_passages
 
 @question_bp.route('/ask', methods=['POST'])
-@token_required
-def ask_question(current_user):
+def ask_question():
     """
     Route pour poser une question sur le contenu d'un livre.
     
@@ -101,9 +99,6 @@ def ask_question(current_user):
     if not book:
         return jsonify({'message': 'Book not found'}), 404
     
-    # Vérification des droits d'accès
-    if not book.get('public') and book.get('owner_id') != current_user.get('id'):
-        return jsonify({'message': 'You do not have access to this book'}), 403
     
     # Chargement des données vectorisées du livre
     files_book = load_processed_data(current_app, book.get('pdf_path'))
@@ -176,8 +171,7 @@ RÉPONSE EN FRANÇAIS:
     return jsonify(answer_response.to_dict()), 200
 
 @question_bp.route('/generate-questions', methods=['POST'])
-@token_required
-def generate_questions(current_user):
+def generate_questions():
     """
     Route qui reçoit en entrée le titre d'un livre, une liste de pages (chaque élément doit contenir
     "level" et "index" correspondant à FilesBook.descriptions) et un sujet.
@@ -259,7 +253,7 @@ Veuillez lister uniquement les questions, chacune sur une nouvelle ligne, sans e
 """
     try:
         questions_response = ai_model.generate_response(
-            current_app.config['AI_MODEL_TYPE_FOR_REPONSE'],
+            current_app.config['AI_MODEL_TYPE_FOR_RESPONSE'],
             current_app.config['API_KEY'],
             prompt
         )

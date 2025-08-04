@@ -58,7 +58,7 @@ class VLLMOpenAIModel(BaseLLMModel):
         """
         try:
             system_prompt = system or self.system_prompt
-            model_name = self.model_name or "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
+            model_name = self.model_name or "microsoft/Phi-3-mini-4k-instruct"
             
             # Paramètres par défaut de vLLM
             top_p = kwargs.pop("top_p", 0.3)

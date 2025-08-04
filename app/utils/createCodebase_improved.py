@@ -130,7 +130,7 @@ class CodeBaseGenerator:
         
         try:
             chat_response = self.client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+                model="microsoft/Phi-3-mini-4k-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Query: {query}"},
@@ -213,7 +213,7 @@ class CodeBaseGenerator:
         No code details, just a high-level summary."""
         try:
             chat_response = self.client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+                model="microsoft/Phi-3-mini-4k-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": content},
@@ -245,7 +245,7 @@ class CodeBaseGenerator:
 
         try:
             chat_response = self.client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+                model="microsoft/Phi-3-mini-4k-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Query: {query}\nFiles:\n{files_info}"},
@@ -341,7 +341,7 @@ class CodeBaseGenerator:
 
         try:
             chat_response = self.client.chat.completions.create(
-                model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+                model="microsoft/Phi-3-mini-4k-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Code:\n{code_content}"},

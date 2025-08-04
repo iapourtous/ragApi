@@ -14,7 +14,7 @@ def get_api_key_for_model(model_type, config=None):
     à leurs clés API respectives, évitant ainsi la duplication de code.
     
     Args:
-        model_type (str): Type de modèle ('openai', 'together', 'qwen', 'vllm_openai')
+        model_type (str): Type de modèle ('openai', 'together', 'groq', 'vllm_openai')
         config (dict, optional): Configuration contenant les clés API. Si None, utilise current_app.config
         
     Returns:
@@ -28,7 +28,7 @@ def get_api_key_for_model(model_type, config=None):
     api_key_map = {
         "openai": "OPENAI_API_KEY",
         "together": "TOGETHER_API_KEY",
-        "qwen": "QWEN_API_KEY",
+        "groq": "GROQ_API_KEY",
         "mistral": "MISTRAL_API_KEY",
         "vllm_openai": None  # vLLM ne nécessite pas de clé API réelle
     }

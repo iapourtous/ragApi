@@ -125,7 +125,9 @@ class BookResponseDTO:
                  owner_id: str = None,
                  public: bool = False,
                  created_at: Optional[str] = None,
-                 updated_at: Optional[str] = None):
+                 updated_at: Optional[str] = None,
+                 category: Optional[str] = None,
+                 subcategory: Optional[str] = None):
         """
         Initialise une réponse de livre.
         
@@ -140,6 +142,8 @@ class BookResponseDTO:
             public: Indique si le livre est public (par défaut: False)
             created_at: Date de création (optionnel)
             updated_at: Date de mise à jour (optionnel)
+            category: Catégorie du livre (optionnel)
+            subcategory: Sous-catégorie du livre (optionnel)
         """
         self.id = id
         self.title = title
@@ -151,6 +155,8 @@ class BookResponseDTO:
         self.public = public
         self.created_at = created_at
         self.updated_at = updated_at
+        self.category = category
+        self.subcategory = subcategory
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'BookResponseDTO':
@@ -173,7 +179,9 @@ class BookResponseDTO:
             owner_id=data.get('ownerId'),
             public=data.get('public', False),
             created_at=data.get('createdAt'),
-            updated_at=data.get('updatedAt')
+            updated_at=data.get('updatedAt'),
+            category=data.get('category'),
+            subcategory=data.get('subcategory')
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -203,6 +211,10 @@ class BookResponseDTO:
             result['created_at'] = self.created_at  # Utiliser created_at au lieu de createdAt
         if self.updated_at:
             result['updated_at'] = self.updated_at  # Utiliser updated_at au lieu de updatedAt
+        if self.category:
+            result['category'] = self.category
+        if self.subcategory:
+            result['subcategory'] = self.subcategory
             
         return result
 

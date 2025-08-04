@@ -10,7 +10,6 @@ from flask_cors import CORS
 from .services.sevice_manager import ServiceManager
 import logging
 from .model_loader import get_model, get_device
-from .services.user_service import UserService
 
 def create_app(config=None):
     """
@@ -57,15 +56,8 @@ def create_app(config=None):
         logger.error(f"Erreur lors du chargement du modèle : {e}")
         raise
 
-    # Initialisation de l'utilisateur par défaut
-    try:
-        with app.app_context():
-            #user_service = UserService()
-            #user_service.create_default_user()
-            logger.info("Vérification/création de l'utilisateur par défaut effectuée")
-    except Exception as e:
-        logger.error(f"Erreur lors de l'initialisation de l'utilisateur par défaut : {e}")
-        raise
+    # Plus besoin d'initialisation utilisateur
+    logger.info("Application sans authentification - aucun utilisateur par défaut requis")
 
     logger.info("Initialisation de l'application terminée avec succès")
     return app

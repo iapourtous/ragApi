@@ -54,7 +54,7 @@ def process_query(app, query, files, new_generate, additional_instructions="", m
         model = app['model']
 
         api_key = app['config']['API_KEY']
-        model_type_for_response = app['config']['AI_MODEL_TYPE_FOR_REPONSE']
+        model_type_for_response = app['config']['AI_MODEL_TYPE_FOR_RESPONSE']
         model_type_for_filter = app['config']['AI_MODEL_TYPE']
         
         send_progress("Clarification de la question")

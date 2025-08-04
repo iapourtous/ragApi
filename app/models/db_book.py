@@ -33,12 +33,16 @@ class DBBook:
         metadata (dict): Métadonnées additionnelles
         created_at (datetime): Date et heure de création de l'entrée
         illustration (bool): Indique si le livre contient des illustrations à traiter
+        description_embedding (list): Vecteur d'embedding de la description
+        description_embedding_model (str): Nom du modèle utilisé pour l'embedding
+        description_embedding_date (datetime): Date de calcul de l'embedding
     """
 
     def __init__(self, title, author=None, publication_year=None, description=None,
                  category=None, subcategory=None, edition=None, proprietary=None,
                  cover_image=None, pdf_path=None, db_path=None, begin=None, end=None,
-                 directory=None, metadata=None, created_at=None, _id=None, illustration=False):
+                 directory=None, metadata=None, created_at=None, _id=None, illustration=False,
+                 public=True, description_embedding=None, description_embedding_model=None, description_embedding_date=None):
         """
         Initialise une nouvelle instance de DBBook.
 
@@ -61,6 +65,9 @@ class DBBook:
             created_at (datetime, optional): Date et heure de création
             _id (str, optional): Identifiant unique dans la base de données
             illustration (bool, optional): Présence d'illustrations à traiter
+            description_embedding (list, optional): Vecteur d'embedding de la description
+            description_embedding_model (str, optional): Nom du modèle utilisé
+            description_embedding_date (datetime, optional): Date de calcul de l'embedding
         """
         self._id = _id
         self.title = title
@@ -80,6 +87,10 @@ class DBBook:
         self.metadata = metadata or {}
         self.created_at = created_at or datetime.utcnow()
         self.illustration = illustration
+        self.public = public
+        self.description_embedding = description_embedding
+        self.description_embedding_model = description_embedding_model
+        self.description_embedding_date = description_embedding_date
 
     @staticmethod
     def from_dict(data):
@@ -113,7 +124,10 @@ class DBBook:
             directory=data.get('directory'),
             metadata=data.get('metadata', {}),
             created_at=data.get('created_at'),
-            illustration=data.get('illustration', False)
+            illustration=data.get('illustration', False),
+            description_embedding=data.get('description_embedding'),
+            description_embedding_model=data.get('description_embedding_model'),
+            description_embedding_date=data.get('description_embedding_date')
         )
 
     def to_dict(self):
@@ -143,7 +157,11 @@ class DBBook:
             'directory': self.directory,
             'metadata': self.metadata,
             'created_at': self.created_at,
-            'illustration': self.illustration
+            'illustration': self.illustration,
+            'public': self.public,
+            'description_embedding': self.description_embedding,
+            'description_embedding_model': self.description_embedding_model,
+            'description_embedding_date': self.description_embedding_date
         }
         if self._id:
             data['_id'] = self._id

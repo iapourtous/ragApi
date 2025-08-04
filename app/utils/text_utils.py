@@ -34,18 +34,34 @@ def normalize_text(text):
     # Conversion en majuscules pour standardiser le texte
     return text_without_special.upper()
 
-def contain_key(text, keywords):
+def contain_key(text, keywords, use_ner_verification=True):
     """
-    Vérifie si tous les mots-clés sont présents dans le texte normalisé.
+    Vérifie si tous les mots-clés/entités sont présents dans le texte normalisé.
 
-    Cette fonction normalise d'abord le texte fourni, puis vérifie que chaque mot-clé normalisé
-    est présent dans l'ensemble des mots du texte. Elle retourne `True` uniquement si tous les
-    mots-clés sont trouvés, sinon `False`.
+    Cette fonction peut utiliser soit la vérification traditionnelle des mots-clés,
+    soit la vérification intelligente des entités nommées qui est plus robuste.
 
     :param text: Chaîne de caractères dans laquelle rechercher les mots-clés.
-    :param keywords: Liste de mots-clés à rechercher dans le texte.
+    :param keywords: Liste de mots-clés/entités à rechercher dans le texte.
+    :param use_ner_verification: Si True, utilise la vérification NER; sinon méthode traditionnelle.
     :return: `True` si tous les mots-clés sont présents dans le texte, sinon `False`.
     """
+    if not keywords:
+        return True
+        
+    if use_ner_verification:
+        try:
+            from .ner_utils import verify_entities_in_text
+            found_entities = verify_entities_in_text(keywords, text)
+            # Vérifier si au moins une entité significative est trouvée
+            # (plutôt que toutes, pour être moins restrictif)
+            return len(found_entities) > 0
+        except Exception as e:
+            import logging
+            logging.warning(f"Erreur vérification NER, fallback vers méthode traditionnelle: {e}")
+            # Fallback vers la méthode traditionnelle
+    
+    # Méthode traditionnelle
     # Normalisation du texte pour une comparaison standardisée
     normalized_text = normalize_text(text)
     # Création d'un ensemble de mots du texte pour une recherche rapide
@@ -106,9 +122,8 @@ def search_upper_words(phrase):
     """
     Recherche les mots en majuscules dans une phrase, en excluant le premier mot.
 
-    Cette fonction est utilisée pour identifier des mots-clés importants ou des noms propres
-    qui sont souvent écrits en majuscules dans une phrase.
-
+    Cette fonction est conservée comme fallback pour la nouvelle logique NER.
+    
     :param phrase: Phrase dans laquelle rechercher les mots en majuscules.
     :return: Liste de mots en majuscules trouvés dans la phrase, excluant le premier mot.
     """
@@ -118,6 +133,30 @@ def search_upper_words(phrase):
     words = phrase.split()
     # Filtrage des mots en majuscules, en excluant le premier mot
     return [word for word in words[1:] if word[0].isupper()]
+
+def search_named_entities_smart(phrase, language="fr", use_ner=True):
+    """
+    Recherche intelligente d'entités nommées dans une phrase.
+    
+    Cette fonction remplace l'ancienne logique de search_upper_words en utilisant
+    la reconnaissance d'entités nommées (NER) avec spaCy. Elle fournit un fallback
+    vers l'ancienne méthode si la NER échoue.
+    
+    :param phrase: Phrase dans laquelle rechercher les entités nommées.
+    :param language: Langue du texte pour la NER (défaut: "fr").
+    :param use_ner: Si True, utilise la NER; sinon utilise l'ancienne méthode.
+    :return: Liste d'entités nommées ou de mots en majuscules.
+    """
+    if use_ner:
+        try:
+            from .ner_utils import search_named_entities
+            return search_named_entities(phrase, language)
+        except Exception as e:
+            import logging
+            logging.warning(f"Erreur NER, fallback vers search_upper_words: {e}")
+            return search_upper_words(phrase)
+    else:
+        return search_upper_words(phrase)
 
 def vectorize_query(query, model):
     """
